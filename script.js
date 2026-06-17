@@ -10,6 +10,8 @@ const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
 const userConsent = document.querySelector("[data-user-consent]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
+const tronWalletLink = document.querySelector("[data-tron-wallet-link]");
+const walletNetwork = document.querySelector("[data-wallet-network]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
 const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
@@ -153,6 +155,15 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
+const walletLabels = {
+  evm: "Ethereum / EVM",
+  tron: "TRON USDT TRC20",
+};
+
+const getSelectedWalletChain = () => (walletNetwork?.value === "tron" ? "tron" : "evm");
+
+const getWalletLabel = (chain = getSelectedWalletChain()) => walletLabels[chain] || walletLabels.evm;
+
 const unlockCheckForm = (address) => {
   if (!checkForm) return;
   checkForm.classList.remove("is-locked");
@@ -174,7 +185,7 @@ const lockCheckForm = () => {
   checkForm.querySelectorAll("input, button").forEach((control) => {
     control.disabled = true;
   });
-  if (checkLockNote) checkLockNote.textContent = "Сначала подключите Trust Wallet через кнопку Connect.";
+  if (checkLockNote) checkLockNote.textContent = "Сначала выберите сеть, подтвердите согласие и подключите кошелёк через кнопку Connect.";
   if (userLogout) userLogout.hidden = true;
 };
 
@@ -252,10 +263,81 @@ const getTrustDeeplink = () => {
   return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
 };
 
-const showTrustDeeplink = () => {
-  if (!trustDeeplink) return;
-  trustDeeplink.href = getTrustDeeplink();
-  trustDeeplink.hidden = false;
+const showWalletLinks = () => {
+  const chain = getSelectedWalletChain();
+  if (trustDeeplink) {
+    trustDeeplink.href = getTrustDeeplink();
+    trustDeeplink.hidden = chain !== "evm";
+  }
+  if (tronWalletLink) {
+    tronWalletLink.hidden = chain !== "tron";
+  }
+};
+
+const waitForTronWeb = async () => {
+  for (let index = 0; index < 20; index += 1) {
+    if (window.tronWeb?.defaultAddress?.base58) return window.tronWeb;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return window.tronWeb;
+};
+
+const connectEvmWallet = async () => {
+  const provider = getTrustProvider();
+  if (!provider) {
+    showWalletLinks();
+    window.location.href = getTrustDeeplink();
+    throw new Error("Открываем страницу внутри Trust Wallet/MetaMask. Если браузер не переключился автоматически, нажмите ссылку «Открыть в Trust Wallet».");
+  }
+
+  const accounts = await provider.request({ method: "eth_requestAccounts" });
+  const address = accounts?.[0];
+  if (!address) throw new Error("Кошелёк не вернул адрес");
+
+  const nonce = await requestJson("/api/auth/nonce", {
+    method: "POST",
+    body: JSON.stringify({ chain: "evm", address }),
+  });
+  const chainId = await provider.request({ method: "eth_chainId" }).catch(() => "1");
+  const signature = await provider.request({ method: "personal_sign", params: [nonce.message, address] });
+  return requestJson("/api/auth/wallet", {
+    method: "POST",
+    body: JSON.stringify({ chain: "evm", address, signature, chainId }),
+  });
+};
+
+const connectTronWallet = async () => {
+  if (!window.tronLink && !window.tronWeb) {
+    throw new Error("Для TRON USDT установите TronLink и откройте сайт в браузере с этим расширением/кошельком.");
+  }
+
+  if (window.tronLink?.request) {
+    const connectResult = await window.tronLink.request({ method: "tron_requestAccounts" });
+    if (connectResult?.code && connectResult.code !== 200) {
+      throw new Error(connectResult.message || "TronLink не подключил кошелёк");
+    }
+  }
+
+  const tronWeb = await waitForTronWeb();
+  const address = tronWeb?.defaultAddress?.base58;
+  if (!tronWeb || !address) {
+    throw new Error("TronLink не вернул TRON адрес. Разблокируйте TronLink и разрешите подключение сайта.");
+  }
+
+  const nonce = await requestJson("/api/auth/nonce", {
+    method: "POST",
+    body: JSON.stringify({ chain: "tron", address }),
+  });
+
+  if (!tronWeb.trx?.signMessageV2) {
+    throw new Error("TronLink устарел: нужна поддержка signMessageV2.");
+  }
+
+  const signature = await tronWeb.trx.signMessageV2(nonce.message);
+  return requestJson("/api/auth/wallet", {
+    method: "POST",
+    body: JSON.stringify({ chain: "tron", token: "USDT_TRC20", address, signature }),
+  });
 };
 
 const connectUserWallet = async () => {
@@ -269,36 +351,18 @@ const connectUserWallet = async () => {
   const health = await requestJson("/api/health");
   if (!health.ok) throw new Error("Backend не готов к авторизации.");
 
-  const provider = getTrustProvider();
-  if (!provider) {
-    showTrustDeeplink();
-    window.location.href = getTrustDeeplink();
-    throw new Error("Открываем страницу внутри Trust Wallet. Если браузер не переключился автоматически, нажмите ссылку «Открыть в Trust Wallet».");
-  }
-
-  const accounts = await provider.request({ method: "eth_requestAccounts" });
-  const address = accounts?.[0];
-  if (!address) throw new Error("Кошелёк не вернул адрес");
-
-  const nonce = await requestJson("/api/auth/nonce", {
-    method: "POST",
-    body: JSON.stringify({ address }),
-  });
-  const chainId = await provider.request({ method: "eth_chainId" });
-  const signature = await provider.request({ method: "personal_sign", params: [nonce.message, address] });
-  return requestJson("/api/auth/wallet", {
-    method: "POST",
-    body: JSON.stringify({ address, signature, chainId }),
-  });
+  return getSelectedWalletChain() === "tron" ? connectTronWallet() : connectEvmWallet();
 };
 
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
-showTrustDeeplink();
+showWalletLinks();
+
+walletNetwork?.addEventListener("change", showWalletLinks);
 
 userWalletConnect?.addEventListener("click", async () => {
   userWalletConnect.disabled = true;
-  userWalletStatus.textContent = "Откройте Trust Wallet и подпишите согласие. Это не переводит средства и не даёт доступ к списанию.";
+  userWalletStatus.textContent = `Откройте ${getWalletLabel()} и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.`;
 
   try {
     const result = await connectUserWallet();

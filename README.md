@@ -29,9 +29,7 @@ Do not commit the bot token to GitHub. If a token was posted in a message or log
 
 The bot uses a Telegram webhook in production and also sends notifications about wallet logins,
 new checks, and contact requests. Without `PUBLIC_BASE_URL`, it falls back to polling for local use.
-Wallet login notifications include the public native balance for Ethereum, BNB Smart Chain,
-Polygon, Base, Arbitrum One, and OP Mainnet. Custom RPC URLs can be set with the variables shown
-in `.env.example`.
+Wallet login supports Ethereum/EVM wallets through Trust Wallet or MetaMask and TRON USDT TRC20 through TronLink. EVM login notifications scan Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum One, and OP Mainnet, then show only networks with a non-zero public native balance. TRON login notifications check the public USDT TRC20 balance. Custom RPC URLs can be set with the variables shown in `.env.example`. Multiple custom RPC URLs for one network can be separated with commas.
 
 For local development, copy `.env.example` to `.env` and run `npm start`. The start command loads
 `.env` automatically. Check `http://localhost:3000/api/health`: Telegram status should be `running`.
