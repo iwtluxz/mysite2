@@ -37,9 +37,28 @@
 
         <div class="admin-dashboard" data-admin-dashboard hidden>
           <div class="admin-cards">
+            <article><strong data-total-users>0</strong><span>пользователей</span></article>
             <article><strong data-total-checks>0</strong><span>проверок</span></article>
             <article><strong data-total-leads>0</strong><span>заявок</span></article>
             <article><strong data-last-risk>—</strong><span>последний риск</span></article>
+          </div>
+
+          <div class="table-panel">
+            <h2>Пользователи Trust Wallet</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Адрес</th>
+                    <th>Первый вход</th>
+                    <th>Последний вход</th>
+                    <th>Входов</th>
+                    <th>Проверок</th>
+                  </tr>
+                </thead>
+                <tbody data-users-table></tbody>
+              </table>
+            </div>
           </div>
 
           <div class="table-panel">
@@ -85,7 +104,8 @@
       <span>Закрытая панель администратора</span>
     </footer>
 
-    <script src="script.js?v=trust4"></script>
+    <script src="config.js?v=backend1"></script>
+    <script src="script.js?v=backend1"></script>
   </body>
 </html>
 

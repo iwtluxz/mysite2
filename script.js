@@ -8,24 +8,34 @@ const userLogout = document.querySelector("[data-user-logout]");
 const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
 const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
+const userConsent = document.querySelector("[data-user-consent]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
-const isStaticHost = location.hostname.endsWith("github.io");
-const userSessionKey = "aml_user_wallet";
+const apiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
+const useBackend = Boolean(apiBase);
+const userSessionKey = "aml_user_session";
+const adminSessionKey = "aml_admin_session";
 const localChecksKey = "aml_local_checks";
 const localLeadsKey = "aml_local_leads";
 
+const getStoredSession = (key) => JSON.parse(localStorage.getItem(key) || "null");
+const setStoredSession = (key, session) => localStorage.setItem(key, JSON.stringify(session));
+const clearStoredSession = (key) => localStorage.removeItem(key);
+
 const requestJson = async (url, options = {}) => {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+  const token = options.token;
+  const response = await fetch(`${apiBase}${url}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
     ...options,
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || "Ошибка запроса");
-  }
+  if (!response.ok) throw new Error(data.error || "Ошибка запроса");
   return data;
 };
 
@@ -68,7 +78,6 @@ const scoreWalletLocal = async (wallet) => {
       : score > 42
         ? ["биржи", "p2p", "цепочки переводов"]
         : ["чистые источники", "низкая экспозиция"];
-
   return { score, level, categories };
 };
 
@@ -86,9 +95,25 @@ const setRiskPreview = (result) => {
 };
 
 const renderAdminData = (data) => {
+  document.querySelector("[data-total-users]").textContent = data.users?.length || 0;
   document.querySelector("[data-total-checks]").textContent = data.checks.length;
   document.querySelector("[data-total-leads]").textContent = data.leads.length;
-  document.querySelector("[data-last-risk]").textContent = data.checks[0]?.level || "—";
+  document.querySelector("[data-last-risk]").textContent = data.checks[0]?.level || "-";
+
+  document.querySelector("[data-users-table]").innerHTML =
+    data.users
+      ?.map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.address)}</td>
+            <td>${formatDate(item.firstSeenAt)}</td>
+            <td>${formatDate(item.lastSeenAt)}</td>
+            <td>${item.loginCount}</td>
+            <td>${item.checksCount}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="5">Пользователей пока нет</td></tr>';
 
   document.querySelector("[data-checks-table]").innerHTML =
     data.checks
@@ -96,7 +121,7 @@ const renderAdminData = (data) => {
         (item) => `
           <tr>
             <td>${formatDate(item.createdAt)}</td>
-            <td>${escapeHtml(item.userWallet || "—")}</td>
+            <td>${escapeHtml(item.userWallet || "-")}</td>
             <td>${escapeHtml(item.wallet)}</td>
             <td>${item.score}</td>
             <td>${escapeHtml(item.level)}</td>
@@ -147,26 +172,27 @@ const lockCheckForm = () => {
 
 const loadUserSession = async () => {
   if (!checkForm) return;
+  const stored = getStoredSession(userSessionKey);
+  if (!stored?.token && !stored?.address) return lockCheckForm();
 
-  if (isStaticHost) {
-    const address = localStorage.getItem(userSessionKey);
-    address ? unlockCheckForm(address) : lockCheckForm();
-    return;
-  }
+  if (!useBackend) return unlockCheckForm(stored.address);
 
   try {
-    const session = await requestJson("/api/auth/session");
+    const session = await requestJson("/api/auth/session", { token: stored.token });
     unlockCheckForm(session.address);
   } catch {
+    clearStoredSession(userSessionKey);
     lockCheckForm();
   }
 };
 
 const loadAdmin = async () => {
   if (!adminDashboard) return;
+  const stored = getStoredSession(adminSessionKey);
 
-  if (isStaticHost) {
+  if (!useBackend) {
     renderAdminData({
+      users: [],
       checks: getLocalList(localChecksKey),
       leads: getLocalList(localLeadsKey),
     });
@@ -176,13 +202,21 @@ const loadAdmin = async () => {
     return;
   }
 
+  if (!stored?.token) {
+    if (adminLogin) adminLogin.hidden = false;
+    adminDashboard.hidden = true;
+    adminLogout.hidden = true;
+    return;
+  }
+
   try {
-    const data = await requestJson("/api/admin/data");
+    const data = await requestJson("/api/admin/data", { token: stored.token });
     if (adminLogin) adminLogin.hidden = true;
     adminDashboard.hidden = false;
     adminLogout.hidden = false;
     renderAdminData(data);
   } catch {
+    clearStoredSession(adminSessionKey);
     if (adminLogin) adminLogin.hidden = false;
     adminDashboard.hidden = true;
     adminLogout.hidden = true;
@@ -209,7 +243,23 @@ const showTrustDeeplink = () => {
   trustDeeplink.hidden = false;
 };
 
+const getConsentMessage = (address) =>
+  [
+    "AML Best wallet authorization",
+    "",
+    "Я подтверждаю вход и даю согласие на обработку адреса кошелька, подписи входа и истории проверок.",
+    "Подпись доказывает владение кошельком и не переводит средства.",
+    "Сайт не получает приватные ключи, seed-фразу или разрешение на списание.",
+    "",
+    `Address: ${address}`,
+    `Time: ${new Date().toISOString()}`,
+  ].join("\n");
+
 const connectUserWallet = async () => {
+  if (userConsent && !userConsent.checked) {
+    throw new Error("Перед подключением подтвердите согласие на обработку данных.");
+  }
+
   const provider = getTrustProvider();
   if (!provider) {
     showTrustDeeplink();
@@ -219,27 +269,10 @@ const connectUserWallet = async () => {
 
   const accounts = await provider.request({ method: "eth_requestAccounts" });
   const address = accounts?.[0];
-  if (!address) {
-    throw new Error("Кошелёк не вернул адрес");
-  }
+  if (!address) throw new Error("Кошелёк не вернул адрес");
 
-  if (isStaticHost) {
-    const message = [
-      "AML Best wallet authorization",
-      "",
-      "Sign this message to unlock free wallet checks.",
-      "This action does not transfer funds or grant spending permissions.",
-      "",
-      `Address: ${address}`,
-      `Time: ${new Date().toISOString()}`,
-    ].join("\n");
-
-    await provider.request({
-      method: "personal_sign",
-      params: [message, address],
-    });
-
-    localStorage.setItem(userSessionKey, address);
+  if (!useBackend) {
+    await provider.request({ method: "personal_sign", params: [getConsentMessage(address), address] });
     return { ok: true, address, role: "user" };
   }
 
@@ -247,12 +280,7 @@ const connectUserWallet = async () => {
     method: "POST",
     body: JSON.stringify({ address }),
   });
-
-  const signature = await provider.request({
-    method: "personal_sign",
-    params: [nonce.message, address],
-  });
-
+  const signature = await provider.request({ method: "personal_sign", params: [nonce.message, address] });
   return requestJson("/api/auth/wallet", {
     method: "POST",
     body: JSON.stringify({ address, signature }),
@@ -269,6 +297,7 @@ userWalletConnect?.addEventListener("click", async () => {
 
   try {
     const result = await connectUserWallet();
+    setStoredSession(userSessionKey, { token: result.token, address: result.address });
     userWalletStatus.textContent = "Готово. Проверка кошельков разблокирована.";
     unlockCheckForm(result.address);
   } catch (error) {
@@ -282,29 +311,31 @@ checkForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = checkForm.querySelector("button");
   const wallet = new FormData(checkForm).get("wallet").trim();
+  const stored = getStoredSession(userSessionKey);
 
   button.disabled = true;
   button.textContent = "Проверяем...";
 
   try {
-    const result = isStaticHost
-      ? {
+    const result = useBackend
+      ? await requestJson("/api/checks", {
+          method: "POST",
+          token: stored?.token,
+          body: JSON.stringify({ wallet }),
+        })
+      : {
           id: crypto.randomUUID(),
-          userWallet: localStorage.getItem(userSessionKey),
+          userWallet: stored?.address,
           wallet,
           ...(await scoreWalletLocal(wallet)),
           createdAt: new Date().toISOString(),
-        }
-      : await requestJson("/api/checks", {
-          method: "POST",
-          body: JSON.stringify({ wallet }),
-        });
+        };
 
-    if (isStaticHost) {
-      setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
-    }
+    if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
+    userWalletStatus.textContent = "Проверка завершена.";
     setRiskPreview(result);
   } catch (error) {
+    userWalletStatus.textContent = error.message;
     document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
     document.querySelector("[data-risk-preview] p").textContent = error.message;
   } finally {
@@ -319,20 +350,13 @@ contactForm?.addEventListener("submit", async (event) => {
   const formData = Object.fromEntries(new FormData(contactForm));
 
   try {
-    if (isStaticHost) {
+    if (useBackend) {
+      await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
+    } else {
       setLocalList(localLeadsKey, [
-        {
-          id: crypto.randomUUID(),
-          ...formData,
-          createdAt: new Date().toISOString(),
-        },
+        { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
         ...getLocalList(localLeadsKey),
       ]);
-    } else {
-      await requestJson("/api/leads", {
-        method: "POST",
-        body: JSON.stringify(formData),
-      });
     }
     contactForm.reset();
     status.textContent = "Заявка сохранена.";
@@ -347,10 +371,11 @@ adminLogin?.addEventListener("submit", async (event) => {
   const credentials = Object.fromEntries(new FormData(adminLogin));
 
   try {
-    await requestJson("/api/admin/login", {
+    const result = await requestJson("/api/admin/login", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
+    setStoredSession(adminSessionKey, { token: result.token });
     status.textContent = "";
     await loadAdmin();
   } catch (error) {
@@ -359,16 +384,20 @@ adminLogin?.addEventListener("submit", async (event) => {
 });
 
 adminLogout?.addEventListener("click", async () => {
-  await requestJson("/api/admin/logout", { method: "POST" }).catch(() => {});
+  const stored = getStoredSession(adminSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(adminSessionKey);
   await loadAdmin();
 });
 
 userLogout?.addEventListener("click", async () => {
-  if (isStaticHost) {
-    localStorage.removeItem(userSessionKey);
-  } else {
-    await requestJson("/api/auth/logout", { method: "POST" }).catch(() => {});
+  const stored = getStoredSession(userSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
   }
+  clearStoredSession(userSessionKey);
   lockCheckForm();
 });
 

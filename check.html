@@ -35,9 +35,16 @@
           <div class="wallet-login" data-user-wallet-login>
             <div>
               <h2>Connect Trust Wallet</h2>
-              <p>Подключение нужно только для входа. Сайт не запрашивает перевод и не получает разрешение на списание.</p>
+              <p>Подключение нужно только для входа. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
+            <label class="consent-row">
+              <input type="checkbox" data-user-consent />
+              <span>
+                Продолжая, вы даёте согласие на обработку адреса кошелька, подписи входа и истории проверок.
+                Подпись подтверждает владение кошельком и не даёт сайту доступ к средствам.
+              </span>
+            </label>
             <button type="button" data-user-wallet-connect>Connect</button>
             <a
               class="wallet-deeplink"
@@ -74,7 +81,8 @@
       <span>Проверка доступна после входа через Trust Wallet</span>
     </footer>
 
-    <script src="script.js?v=trust4"></script>
+    <script src="config.js?v=backend1"></script>
+    <script src="script.js?v=backend1"></script>
   </body>
 </html>
 
