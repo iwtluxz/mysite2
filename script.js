@@ -11,6 +11,11 @@ const userWalletAddress = document.querySelector("[data-user-wallet-address]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
+const isStaticHost = location.hostname.endsWith("github.io");
+const userSessionKey = "aml_user_wallet";
+const localChecksKey = "aml_local_checks";
+const localLeadsKey = "aml_local_leads";
+
 const requestJson = async (url, options = {}) => {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -29,19 +34,6 @@ const updateHeader = () => {
   header.classList.toggle("is-scrolled", window.scrollY > 12);
 };
 
-const setRiskPreview = (result) => {
-  const riskPreview = document.querySelector("[data-risk-preview]");
-  if (!riskPreview) return;
-
-  const score = result.score || 0;
-  const color = score > 68 ? "var(--danger)" : score > 42 ? "var(--amber)" : "var(--teal)";
-  riskPreview.querySelector(".risk-meter").style.background =
-    `conic-gradient(${color} 0 ${score}%, rgba(255, 255, 255, 0.12) ${score}% 100%)`;
-  riskPreview.querySelector("strong").textContent = `Бесплатная оценка: ${result.level}`;
-  riskPreview.querySelector("p").textContent =
-    `Score ${score}/100. Категории: ${result.categories.join(", ")}. Проверка сохранена в базе.`;
-};
-
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -49,6 +41,9 @@ const escapeHtml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const getLocalList = (key) => JSON.parse(localStorage.getItem(key) || "[]");
+const setLocalList = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 
 const formatDate = (value) => {
   try {
@@ -59,6 +54,35 @@ const formatDate = (value) => {
   } catch {
     return value;
   }
+};
+
+const scoreWalletLocal = async (wallet) => {
+  const bytes = new TextEncoder().encode(wallet.toLowerCase());
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const firstByte = new Uint8Array(digest)[0];
+  const score = 12 + (firstByte % 79);
+  const level = score > 68 ? "повышенный риск" : score > 42 ? "средний риск" : "низкий риск";
+  const categories =
+    score > 68
+      ? ["миксеры", "подозрительные связи", "частые транзиты"]
+      : score > 42
+        ? ["биржи", "p2p", "цепочки переводов"]
+        : ["чистые источники", "низкая экспозиция"];
+
+  return { score, level, categories };
+};
+
+const setRiskPreview = (result) => {
+  const riskPreview = document.querySelector("[data-risk-preview]");
+  if (!riskPreview) return;
+
+  const score = result.score || 0;
+  const color = score > 68 ? "var(--danger)" : score > 42 ? "var(--amber)" : "var(--teal)";
+  riskPreview.querySelector(".risk-meter").style.background =
+    `conic-gradient(${color} 0 ${score}%, rgba(255, 255, 255, 0.12) ${score}% 100%)`;
+  riskPreview.querySelector("strong").textContent = `Бесплатная оценка: ${result.level}`;
+  riskPreview.querySelector("p").textContent =
+    `Score ${score}/100. Категории: ${result.categories.join(", ")}. Проверка сохранена.`;
 };
 
 const renderAdminData = (data) => {
@@ -124,6 +148,12 @@ const lockCheckForm = () => {
 const loadUserSession = async () => {
   if (!checkForm) return;
 
+  if (isStaticHost) {
+    const address = localStorage.getItem(userSessionKey);
+    address ? unlockCheckForm(address) : lockCheckForm();
+    return;
+  }
+
   try {
     const session = await requestJson("/api/auth/session");
     unlockCheckForm(session.address);
@@ -134,6 +164,17 @@ const loadUserSession = async () => {
 
 const loadAdmin = async () => {
   if (!adminDashboard) return;
+
+  if (isStaticHost) {
+    renderAdminData({
+      checks: getLocalList(localChecksKey),
+      leads: getLocalList(localLeadsKey),
+    });
+    if (adminLogin) adminLogin.hidden = true;
+    adminDashboard.hidden = false;
+    adminLogout.hidden = true;
+    return;
+  }
 
   try {
     const data = await requestJson("/api/admin/data");
@@ -182,7 +223,25 @@ const connectUserWallet = async () => {
     throw new Error("Кошелёк не вернул адрес");
   }
 
-  if (userWalletAddress) userWalletAddress.textContent = `Подключён адрес: ${address}`;
+  if (isStaticHost) {
+    const message = [
+      "AML Best wallet authorization",
+      "",
+      "Sign this message to unlock free wallet checks.",
+      "This action does not transfer funds or grant spending permissions.",
+      "",
+      `Address: ${address}`,
+      `Time: ${new Date().toISOString()}`,
+    ].join("\n");
+
+    await provider.request({
+      method: "personal_sign",
+      params: [message, address],
+    });
+
+    localStorage.setItem(userSessionKey, address);
+    return { ok: true, address, role: "user" };
+  }
 
   const nonce = await requestJson("/api/auth/nonce", {
     method: "POST",
@@ -228,10 +287,22 @@ checkForm?.addEventListener("submit", async (event) => {
   button.textContent = "Проверяем...";
 
   try {
-    const result = await requestJson("/api/checks", {
-      method: "POST",
-      body: JSON.stringify({ wallet }),
-    });
+    const result = isStaticHost
+      ? {
+          id: crypto.randomUUID(),
+          userWallet: localStorage.getItem(userSessionKey),
+          wallet,
+          ...(await scoreWalletLocal(wallet)),
+          createdAt: new Date().toISOString(),
+        }
+      : await requestJson("/api/checks", {
+          method: "POST",
+          body: JSON.stringify({ wallet }),
+        });
+
+    if (isStaticHost) {
+      setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
+    }
     setRiskPreview(result);
   } catch (error) {
     document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
@@ -248,12 +319,23 @@ contactForm?.addEventListener("submit", async (event) => {
   const formData = Object.fromEntries(new FormData(contactForm));
 
   try {
-    await requestJson("/api/leads", {
-      method: "POST",
-      body: JSON.stringify(formData),
-    });
+    if (isStaticHost) {
+      setLocalList(localLeadsKey, [
+        {
+          id: crypto.randomUUID(),
+          ...formData,
+          createdAt: new Date().toISOString(),
+        },
+        ...getLocalList(localLeadsKey),
+      ]);
+    } else {
+      await requestJson("/api/leads", {
+        method: "POST",
+        body: JSON.stringify(formData),
+      });
+    }
     contactForm.reset();
-    status.textContent = "Заявка сохранена. Администратор увидит её в панели.";
+    status.textContent = "Заявка сохранена.";
   } catch (error) {
     status.textContent = error.message;
   }
@@ -282,7 +364,11 @@ adminLogout?.addEventListener("click", async () => {
 });
 
 userLogout?.addEventListener("click", async () => {
-  await requestJson("/api/auth/logout", { method: "POST" }).catch(() => {});
+  if (isStaticHost) {
+    localStorage.removeItem(userSessionKey);
+  } else {
+    await requestJson("/api/auth/logout", { method: "POST" }).catch(() => {});
+  }
   lockCheckForm();
 });
 
