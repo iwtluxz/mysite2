@@ -12,8 +12,11 @@ const userConsent = document.querySelector("[data-user-consent]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
-const apiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
-const useBackend = Boolean(apiBase);
+const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
+const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
+const isStaticGitHubPage = location.hostname.endsWith(".github.io");
+const apiBase = configuredApiBase;
+const useBackend = Boolean(configuredApiBase) || (isHttpPage && !isStaticGitHubPage);
 const userSessionKey = "aml_user_session";
 const adminSessionKey = "aml_admin_session";
 const localChecksKey = "aml_local_checks";
@@ -25,14 +28,19 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 
 const requestJson = async (url, options = {}) => {
   const token = options.token;
-  const response = await fetch(`${apiBase}${url}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(`${apiBase}${url}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  } catch {
+    throw new Error("Backend недоступен. Проверьте адрес API и запуск сервера.");
+  }
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Ошибка запроса");
@@ -172,10 +180,17 @@ const lockCheckForm = () => {
 
 const loadUserSession = async () => {
   if (!checkForm) return;
+  if (!useBackend) {
+    lockCheckForm();
+    if (userWalletStatus) {
+      userWalletStatus.textContent =
+        "Backend не подключён. Авторизация не будет считаться успешной и уведомление в Telegram не отправится.";
+    }
+    return;
+  }
+
   const stored = getStoredSession(userSessionKey);
   if (!stored?.token && !stored?.address) return lockCheckForm();
-
-  if (!useBackend) return unlockCheckForm(stored.address);
 
   try {
     const session = await requestJson("/api/auth/session", { token: stored.token });
@@ -243,21 +258,16 @@ const showTrustDeeplink = () => {
   trustDeeplink.hidden = false;
 };
 
-const getConsentMessage = (address) =>
-  [
-    "AML Best wallet authorization",
-    "",
-    "Я подтверждаю вход и владение этим адресом.",
-    "Подпись не переводит средства и не даёт сайту доступ к списанию или приватным ключам.",
-    "",
-    `Address: ${address}`,
-    `Time: ${new Date().toISOString()}`,
-  ].join("\n");
-
 const connectUserWallet = async () => {
   if (userConsent && !userConsent.checked) {
     throw new Error("Перед подключением нужно явно подтвердить согласие. Без согласия вход и доступ к данным не выполняются.");
   }
+  if (!useBackend) {
+    throw new Error("Backend не подключён. Укажите AML_API_BASE в config.js и разверните server.js.");
+  }
+
+  const health = await requestJson("/api/health");
+  if (!health.ok) throw new Error("Backend не готов к авторизации.");
 
   const provider = getTrustProvider();
   if (!provider) {
@@ -269,11 +279,6 @@ const connectUserWallet = async () => {
   const accounts = await provider.request({ method: "eth_requestAccounts" });
   const address = accounts?.[0];
   if (!address) throw new Error("Кошелёк не вернул адрес");
-
-  if (!useBackend) {
-    await provider.request({ method: "personal_sign", params: [getConsentMessage(address), address] });
-    return { ok: true, address, role: "user" };
-  }
 
   const nonce = await requestJson("/api/auth/nonce", {
     method: "POST",

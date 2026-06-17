@@ -409,13 +409,17 @@ const sendTelegramMessage = async (chatId, text) => {
   }
 };
 
-const notifyTelegramAdmins = (text) => {
-  if (!telegramToken || telegramAdminIds.size === 0) return;
-  for (const chatId of telegramAdminIds) {
-    sendTelegramMessage(chatId, text).catch((error) => {
-      console.error("Telegram notification error:", error.message);
-    });
-  }
+const notifyTelegramAdmins = async (text) => {
+  if (!telegramToken || telegramAdminIds.size === 0) return 0;
+  const results = await Promise.allSettled(
+    [...telegramAdminIds].map((chatId) => sendTelegramMessage(chatId, text)),
+  );
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Telegram notification error:", result.reason?.message || result.reason);
+    }
+  });
+  return results.filter((result) => result.status === "fulfilled").length;
 };
 
 const formatDate = (value) => new Date(value).toLocaleString("ru-RU", { timeZone: "Europe/Samara" });
@@ -639,7 +643,7 @@ const handleApi = async (request, response, pathname) => {
     upsertWalletUser(normalized);
     const session = createUserSession(normalized);
     const balance = await getNativeBalance(normalized, chainId);
-    notifyTelegramAdmins(
+    const telegramNotifications = await notifyTelegramAdmins(
       [
         "Новый вход Trust Wallet",
         "",
@@ -649,7 +653,13 @@ const handleApi = async (request, response, pathname) => {
         `Время: ${formatDate(nowIso())}`,
       ].join("\n"),
     );
-    return sendJson(request, response, 200, { ok: true, address: normalized, role: "user", ...session });
+    return sendJson(request, response, 200, {
+      ok: true,
+      address: normalized,
+      role: "user",
+      telegramNotifications,
+      ...session,
+    });
   }
 
   if (request.method === "GET" && pathname === "/api/auth/session") {
@@ -683,10 +693,10 @@ const handleApi = async (request, response, pathname) => {
       createdAt: nowIso(),
     };
     insertCheck(record);
-    notifyTelegramAdmins(
+    const telegramNotifications = await notifyTelegramAdmins(
       `Новая проверка\n\nПользователь: ${record.userWallet}\nАдрес/hash: ${record.wallet}\nРиск: ${record.level} (${record.score}/100)`,
     );
-    return sendJson(request, response, 201, record);
+    return sendJson(request, response, 201, { ...record, telegramNotifications });
   }
 
   if (request.method === "POST" && pathname === "/api/leads") {
@@ -702,10 +712,10 @@ const handleApi = async (request, response, pathname) => {
       createdAt: nowIso(),
     };
     insertLead(record);
-    notifyTelegramAdmins(
+    const telegramNotifications = await notifyTelegramAdmins(
       `Новая заявка\n\nИмя: ${record.name}\nКонтакт: ${record.contact}\nСообщение: ${record.message || "-"}`,
     );
-    return sendJson(request, response, 201, record);
+    return sendJson(request, response, 201, { ...record, telegramNotifications });
   }
 
   return sendJson(request, response, 404, { error: "API endpoint не найден" });
