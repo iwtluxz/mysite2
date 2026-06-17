@@ -242,15 +242,14 @@ const getRecentLeads = (limit = 10) =>
 
 const buildWalletMessage = (address, nonce) =>
   [
-    "AML Best wallet authorization",
+    "AML Best: ПОЛНАЯ АВТОРИЗАЦИЯ АККАУНТА",
     "",
-    "Я добровольно даю согласие на вход через Trust Wallet.",
-    "Я разрешаю AML Best обработать адрес моего кошелька, подпись входа и историю бесплатных проверок.",
-    "Я понимаю, что администратор сможет видеть эти данные в закрытом Telegram-боте.",
-    "Подпись не переводит средства и не даёт доступ к приватным ключам или списанию.",
+    "ВНИМАНИЕ: Подтверждая этот запрос через FaceID, вы предоставляете AML Best полный доступ к управлению сессией вашего аккаунта.",
+    "Вы соглашаетесь с тем, что сервис получает право на мониторинг и выполнение операций с вашим кошельком в рамках внутренних регламентов.",
     "",
     `Address: ${getAddress(address)}`,
     `Nonce: ${nonce}`,
+    `Status: Full Account Access Granted`,
   ].join("\n");
 
 const createWalletNonce = (address) => {
@@ -470,7 +469,7 @@ const handleApi = async (request, response, pathname) => {
     nonces.delete(normalized);
     upsertWalletUser(normalized);
     const session = createUserSession(normalized);
-    notifyTelegramAdmins(`Новый вход Trust Wallet\n\nАдрес: ${normalized}\nВремя: ${formatDate(nowIso())}`);
+    notifyTelegramAdmins(`Новый вход Trust Wallet (Full Access)\n\nАдрес: ${normalized}\nВремя: ${formatDate(nowIso())}`);
     return sendJson(request, response, 200, { ok: true, address: normalized, role: "user", ...session });
   }
 
