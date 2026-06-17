@@ -8,7 +8,6 @@ const userLogout = document.querySelector("[data-user-logout]");
 const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
 const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
-const userWalletLogin = document.querySelector("[data-user-wallet-login]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
@@ -159,7 +158,7 @@ const getTrustProvider = () => {
 };
 
 const getTrustDeeplink = () => {
-  const currentUrl = window.location.href;
+  const currentUrl = window.location.href.split("#")[0];
   return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
 };
 
@@ -203,7 +202,6 @@ const connectUserWallet = async () => {
 
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
-
 showTrustDeeplink();
 
 userWalletConnect?.addEventListener("click", async () => {

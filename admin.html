@@ -1,58 +1,58 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>РђРґРјРёРЅ-РїР°РЅРµР»СЊ | AML Best</title>
+    <title>Админ-панель | AML Best</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="site-header" data-header>
       <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
-      <nav class="nav" aria-label="РћСЃРЅРѕРІРЅР°СЏ РЅР°РІРёРіР°С†РёСЏ">
-        <a href="check.html">РџСЂРѕРІРµСЂРєР°</a>
-        <a href="features.html">Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё</a>
-        <a href="pricing.html">РўР°СЂРёС„С‹</a>
-        <a href="contacts.html">РљРѕРЅС‚Р°РєС‚С‹</a>
-        <a class="active" href="admin.html">РђРґРјРёРЅ</a>
+      <nav class="nav" aria-label="Основная навигация">
+        <a href="check.html">Проверка</a>
+        <a href="features.html">Возможности</a>
+        <a href="pricing.html">Тарифы</a>
+        <a href="contacts.html">Контакты</a>
+        <a class="active" href="admin.html">Админ</a>
       </nav>
-      <button class="header-cta as-button" data-admin-logout hidden>Р’С‹Р№С‚Рё</button>
+      <button class="header-cta as-button" data-admin-logout hidden>Выйти</button>
     </header>
 
     <main class="page-main">
       <section class="section admin-layout">
         <div class="section-heading">
-          <p class="section-kicker">РђРґРјРёРЅ-РґРѕСЃС‚СѓРї</p>
-          <h1 class="page-title">РџСЂРѕРІРµСЂРєРё Рё Р·Р°СЏРІРєРё РёР· Р±Р°Р·С‹</h1>
-          <p>РђРґРјРёРЅРєР° РѕСЃС‚Р°С‘С‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹Рј Р·Р°РєСЂС‹С‚С‹Рј СЂР°Р·РґРµР»РѕРј. РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ Trust Wallet РІС…РѕРґ РЅСѓР¶РµРЅ РЅР° СЃС‚СЂР°РЅРёС†Рµ РїСЂРѕРІРµСЂРєРё.</p>
+          <p class="section-kicker">Админ-доступ</p>
+          <h1 class="page-title">Проверки и заявки из базы</h1>
+          <p>Админка остаётся отдельным закрытым разделом. Пользовательский Trust Wallet вход нужен на странице проверки.</p>
         </div>
 
         <form class="admin-login" data-admin-login>
-          <p class="fallback-title">Р’С…РѕРґ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°</p>
-          <input name="username" type="text" placeholder="Р›РѕРіРёРЅ" autocomplete="username" required />
-          <input name="password" type="password" placeholder="РџР°СЂРѕР»СЊ" autocomplete="current-password" required />
-          <button type="submit">Р’РѕР№С‚Рё</button>
+          <p class="fallback-title">Вход администратора</p>
+          <input name="username" type="text" placeholder="Логин" autocomplete="username" required />
+          <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required />
+          <button type="submit">Войти</button>
           <p class="form-status" data-admin-status></p>
         </form>
 
         <div class="admin-dashboard" data-admin-dashboard hidden>
           <div class="admin-cards">
-            <article><strong data-total-checks>0</strong><span>РїСЂРѕРІРµСЂРѕРє</span></article>
-            <article><strong data-total-leads>0</strong><span>Р·Р°СЏРІРѕРє</span></article>
-            <article><strong data-last-risk>вЂ”</strong><span>РїРѕСЃР»РµРґРЅРёР№ СЂРёСЃРє</span></article>
+            <article><strong data-total-checks>0</strong><span>проверок</span></article>
+            <article><strong data-total-leads>0</strong><span>заявок</span></article>
+            <article><strong data-last-risk>—</strong><span>последний риск</span></article>
           </div>
 
           <div class="table-panel">
-            <h2>Р‘РµСЃРїР»Р°С‚РЅС‹Рµ РїСЂРѕРІРµСЂРєРё</h2>
+            <h2>Бесплатные проверки</h2>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Р”Р°С‚Р°</th>
-                    <th>РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ</th>
-                    <th>РљРѕС€РµР»С‘Рє / hash</th>
+                    <th>Дата</th>
+                    <th>Пользователь</th>
+                    <th>Кошелёк / hash</th>
                     <th>Score</th>
-                    <th>Р РёСЃРє</th>
+                    <th>Риск</th>
                   </tr>
                 </thead>
                 <tbody data-checks-table></tbody>
@@ -61,15 +61,15 @@
           </div>
 
           <div class="table-panel">
-            <h2>Р—Р°СЏРІРєРё</h2>
+            <h2>Заявки</h2>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Р”Р°С‚Р°</th>
-                    <th>РРјСЏ</th>
-                    <th>РљРѕРЅС‚Р°РєС‚</th>
-                    <th>РЎРѕРѕР±С‰РµРЅРёРµ</th>
+                    <th>Дата</th>
+                    <th>Имя</th>
+                    <th>Контакт</th>
+                    <th>Сообщение</th>
                   </tr>
                 </thead>
                 <tbody data-leads-table></tbody>
@@ -81,11 +81,10 @@
     </main>
 
     <footer class="footer">
-      <span>В© 2026 AML Best</span>
-      <span>Р—Р°РєСЂС‹С‚Р°СЏ РїР°РЅРµР»СЊ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°</span>
+      <span>© 2026 AML Best</span>
+      <span>Закрытая панель администратора</span>
     </footer>
 
-    <script src="script.js?v=trust2"></script>
+    <script src="script.js?v=trust3"></script>
   </body>
 </html>
-
