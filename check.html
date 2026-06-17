@@ -1,33 +1,33 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Бесплатная проверка кошелька | AML Best</title>
+    <title>Р‘РµСЃРїР»Р°С‚РЅР°СЏ РїСЂРѕРІРµСЂРєР° РєРѕС€РµР»СЊРєР° | AML Best</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="site-header" data-header>
       <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
-      <nav class="nav" aria-label="Основная навигация">
-        <a class="active" href="check.html">Проверка</a>
-        <a href="features.html">Возможности</a>
-        <a href="pricing.html">Тарифы</a>
-        <a href="contacts.html">Контакты</a>
-        <a href="admin.html">Админ</a>
+      <nav class="nav" aria-label="РћСЃРЅРѕРІРЅР°СЏ РЅР°РІРёРіР°С†РёСЏ">
+        <a class="active" href="check.html">РџСЂРѕРІРµСЂРєР°</a>
+        <a href="features.html">Р’РѕР·РјРѕР¶РЅРѕСЃС‚Рё</a>
+        <a href="pricing.html">РўР°СЂРёС„С‹</a>
+        <a href="contacts.html">РљРѕРЅС‚Р°РєС‚С‹</a>
+        <a href="admin.html">РђРґРјРёРЅ</a>
       </nav>
-      <button class="header-cta as-button" data-user-logout hidden>Выйти</button>
+      <button class="header-cta as-button" data-user-logout hidden>Р’С‹Р№С‚Рё</button>
     </header>
 
     <main class="page-main">
       <section class="section split page-hero">
         <div class="section-copy">
-          <p class="section-kicker">Вход через Trust Wallet</p>
-          <h1 class="page-title">Сначала подключите кошелёк, потом проверяйте адреса бесплатно</h1>
+          <p class="section-kicker">Р’С…РѕРґ С‡РµСЂРµР· Trust Wallet</p>
+          <h1 class="page-title">РЎРЅР°С‡Р°Р»Р° РїРѕРґРєР»СЋС‡РёС‚Рµ РєРѕС€РµР»С‘Рє, РїРѕС‚РѕРј РїСЂРѕРІРµСЂСЏР№С‚Рµ Р°РґСЂРµСЃР° Р±РµСЃРїР»Р°С‚РЅРѕ</h1>
           <p>
-            Нажмите Connect Trust Wallet. На телефоне откроется Trust Wallet, где пользователь
-            подтвердит подключение и подпишет одноразовое сообщение. Если Face ID или биометрия
-            включены в Trust Wallet, приложение само покажет это подтверждение.
+            РќР°Р¶РјРёС‚Рµ Connect Trust Wallet. РќР° С‚РµР»РµС„РѕРЅРµ РѕС‚РєСЂРѕРµС‚СЃСЏ Trust Wallet, РіРґРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ
+            РїРѕРґС‚РІРµСЂРґРёС‚ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рё РїРѕРґРїРёС€РµС‚ РѕРґРЅРѕСЂР°Р·РѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ. Р•СЃР»Рё Face ID РёР»Рё Р±РёРѕРјРµС‚СЂРёСЏ
+            РІРєР»СЋС‡РµРЅС‹ РІ Trust Wallet, РїСЂРёР»РѕР¶РµРЅРёРµ СЃР°РјРѕ РїРѕРєР°Р¶РµС‚ СЌС‚Рѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ.
           </p>
         </div>
 
@@ -35,29 +35,29 @@
           <div class="wallet-login" data-user-wallet-login>
             <div>
               <h2>Connect Trust Wallet</h2>
-              <p>Подключение нужно только для входа. Сайт не запрашивает перевод и не получает разрешение на списание.</p>
+              <p>РџРѕРґРєР»СЋС‡РµРЅРёРµ РЅСѓР¶РЅРѕ С‚РѕР»СЊРєРѕ РґР»СЏ РІС…РѕРґР°. РЎР°Р№С‚ РЅРµ Р·Р°РїСЂР°С€РёРІР°РµС‚ РїРµСЂРµРІРѕРґ Рё РЅРµ РїРѕР»СѓС‡Р°РµС‚ СЂР°Р·СЂРµС€РµРЅРёРµ РЅР° СЃРїРёСЃР°РЅРёРµ.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
             <button type="button" data-user-wallet-connect>Connect</button>
-            <a class="wallet-deeplink" href="#" data-trust-deeplink hidden>Открыть в Trust Wallet</a>
+            <a class="wallet-deeplink" href="#" data-trust-deeplink hidden>РћС‚РєСЂС‹С‚СЊ РІ Trust Wallet</a>
             <p class="form-status" data-user-wallet-status></p>
           </div>
 
-          <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">
-            <label for="wallet">Адрес кошелька или tx hash для проверки</label>
+          <form class="check-panel is-locked" data-check-form aria-label="Р¤РѕСЂРјР° Р±РµСЃРїР»Р°С‚РЅРѕР№ AML-РїСЂРѕРІРµСЂРєРё">
+            <label for="wallet">РђРґСЂРµСЃ РєРѕС€РµР»СЊРєР° РёР»Рё tx hash РґР»СЏ РїСЂРѕРІРµСЂРєРё</label>
             <div class="input-row">
-              <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
-              <button type="submit" disabled>Проверить бесплатно</button>
+              <input id="wallet" name="wallet" type="text" placeholder="РќР°РїСЂРёРјРµСЂ: 0x71C... РёР»Рё tx hash" required disabled />
+              <button type="submit" disabled>РџСЂРѕРІРµСЂРёС‚СЊ Р±РµСЃРїР»Р°С‚РЅРѕ</button>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала подключите Trust Wallet через кнопку Connect.</p>
+            <p class="form-note" data-check-lock-note>РЎРЅР°С‡Р°Р»Р° РїРѕРґРєР»СЋС‡РёС‚Рµ Trust Wallet С‡РµСЂРµР· РєРЅРѕРїРєСѓ Connect.</p>
 
             <div class="risk-preview" data-risk-preview>
               <div class="risk-meter">
                 <span></span>
               </div>
               <div class="risk-meta">
-                <strong>Ожидает подключения</strong>
-                <p>После входа через Trust Wallet здесь появится бесплатная оценка риска.</p>
+                <strong>РћР¶РёРґР°РµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ</strong>
+                <p>РџРѕСЃР»Рµ РІС…РѕРґР° С‡РµСЂРµР· Trust Wallet Р·РґРµСЃСЊ РїРѕСЏРІРёС‚СЃСЏ Р±РµСЃРїР»Р°С‚РЅР°СЏ РѕС†РµРЅРєР° СЂРёСЃРєР°.</p>
               </div>
             </div>
           </form>
@@ -66,10 +66,11 @@
     </main>
 
     <footer class="footer">
-      <span>© 2026 AML Best</span>
-      <span>Проверка доступна после входа через Trust Wallet</span>
+      <span>В© 2026 AML Best</span>
+      <span>РџСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅР° РїРѕСЃР»Рµ РІС…РѕРґР° С‡РµСЂРµР· Trust Wallet</span>
     </footer>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=trust2"></script>
   </body>
 </html>
+

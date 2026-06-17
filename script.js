@@ -174,7 +174,7 @@ const connectUserWallet = async () => {
   if (!provider) {
     showTrustDeeplink();
     window.location.href = getTrustDeeplink();
-    throw new Error("Открываем страницу внутри Trust Wallet. Если переход не сработал, нажмите ссылку ниже.");
+    throw new Error("Открываем страницу внутри Trust Wallet. Если браузер не переключился автоматически, нажмите ссылку «Открыть в Trust Wallet».");
   }
 
   const accounts = await provider.request({ method: "eth_requestAccounts" });
