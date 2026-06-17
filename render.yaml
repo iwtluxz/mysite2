@@ -10,7 +10,7 @@ services:
         value: 24
       - key: ALLOWED_ORIGINS
         value: https://iwtluxz.github.io
-      - key: ADMIN_USER
-        value: admin
-      - key: ADMIN_PASSWORD
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ADMIN_CHAT_IDS
         sync: false

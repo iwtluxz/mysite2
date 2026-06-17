@@ -1,9 +1,10 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Админ-панель | AML Best</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Администрирование | AML Best</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -14,102 +15,29 @@
         <a href="features.html">Возможности</a>
         <a href="pricing.html">Тарифы</a>
         <a href="contacts.html">Контакты</a>
-        <a class="active" href="admin.html">Админ</a>
       </nav>
-      <button class="header-cta as-button" data-admin-logout hidden>Выйти</button>
     </header>
 
     <main class="page-main">
       <section class="section admin-layout">
         <div class="section-heading">
-          <p class="section-kicker">Админ-доступ</p>
-          <h1 class="page-title">Проверки и заявки из базы</h1>
+          <p class="section-kicker">Закрытый доступ</p>
+          <h1 class="page-title">Администрирование перенесено в Telegram</h1>
           <p>
-            Админка остаётся отдельным закрытым разделом. Здесь отображаются только данные,
-            которые пользователь передал после явного согласия: адрес кошелька, факт подписи входа
-            и история бесплатных проверок.
+            Веб-вход отключён. Данные пользователей, проверок и заявок доступны только
+            Telegram ID, добавленным владельцем сервиса в закрытый список администраторов.
           </p>
-        </div>
-
-        <form class="admin-login" data-admin-login>
-          <p class="fallback-title">Вход администратора</p>
-          <input name="username" type="text" placeholder="Логин" autocomplete="username" required />
-          <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required />
-          <button type="submit">Войти</button>
-          <p class="form-status" data-admin-status></p>
-        </form>
-
-        <div class="admin-dashboard" data-admin-dashboard hidden>
-          <div class="admin-cards">
-            <article><strong data-total-users>0</strong><span>пользователей</span></article>
-            <article><strong data-total-checks>0</strong><span>проверок</span></article>
-            <article><strong data-total-leads>0</strong><span>заявок</span></article>
-            <article><strong data-last-risk>—</strong><span>последний риск</span></article>
-          </div>
-
-          <div class="table-panel">
-            <h2>Пользователи Trust Wallet</h2>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Адрес</th>
-                    <th>Первый вход</th>
-                    <th>Последний вход</th>
-                    <th>Входов</th>
-                    <th>Проверок</th>
-                  </tr>
-                </thead>
-                <tbody data-users-table></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="table-panel">
-            <h2>Бесплатные проверки</h2>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Пользователь</th>
-                    <th>Кошелёк / hash</th>
-                    <th>Score</th>
-                    <th>Риск</th>
-                  </tr>
-                </thead>
-                <tbody data-checks-table></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="table-panel">
-            <h2>Заявки</h2>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Имя</th>
-                    <th>Контакт</th>
-                    <th>Сообщение</th>
-                  </tr>
-                </thead>
-                <tbody data-leads-table></tbody>
-              </table>
-            </div>
-          </div>
+          <a class="btn btn-ghost" href="index.html">Вернуться на сайт</a>
         </div>
       </section>
     </main>
 
     <footer class="footer">
       <span>© 2026 AML Best</span>
-      <span>Закрытая панель администратора</span>
+      <span>Публичная админ-панель отключена</span>
     </footer>
 
-    <script src="config.js?v=consent1"></script>
-    <script src="script.js?v=consent1"></script>
+    <script src="config.js?v=telegram1"></script>
+    <script src="script.js?v=telegram1"></script>
   </body>
 </html>
-

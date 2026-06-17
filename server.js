@@ -10,14 +10,26 @@ const root = __dirname;
 const dataDir = path.join(root, "data");
 const dbPath = path.join(dataDir, "aml-best.sqlite");
 const port = Number(process.env.PORT || 3000);
-const adminUser = process.env.ADMIN_USER || "admin";
-const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "https://iwtluxz.github.io,http://localhost:3000,http://127.0.0.1:3000")
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS ||
+  "https://iwtluxz.github.io,http://localhost:3000,http://127.0.0.1:3000"
+)
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const telegramToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const telegramAdminIds = new Set(
+  String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
+const telegramApi = telegramToken ? `https://api.telegram.org/bot${telegramToken}` : "";
+
 const nonces = new Map();
 let database;
+let telegramOffset = 0;
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -72,12 +84,8 @@ const ensureDb = () => {
   `);
 
   const checkColumns = database.prepare("PRAGMA table_info(checks)").all().map((column) => column.name);
-  if (!checkColumns.includes("user_wallet")) {
-    database.exec("ALTER TABLE checks ADD COLUMN user_wallet TEXT");
-  }
-  if (!checkColumns.includes("tx_hash")) {
-    database.exec("ALTER TABLE checks ADD COLUMN tx_hash TEXT");
-  }
+  if (!checkColumns.includes("user_wallet")) database.exec("ALTER TABLE checks ADD COLUMN user_wallet TEXT");
+  if (!checkColumns.includes("tx_hash")) database.exec("ALTER TABLE checks ADD COLUMN tx_hash TEXT");
 };
 
 const readBody = (request) =>
@@ -127,7 +135,7 @@ const getBearerToken = (request) => {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : undefined;
 };
 
-const getSession = (request, role) => {
+const getUserSession = (request) => {
   const token = getBearerToken(request);
   if (!token) return undefined;
 
@@ -137,7 +145,7 @@ const getSession = (request, role) => {
     WHERE token = ?
   `).get(token);
 
-  if (!session || session.role !== role || new Date(session.expiresAt).getTime() < Date.now()) {
+  if (!session || session.role !== "user" || new Date(session.expiresAt).getTime() < Date.now()) {
     if (session) database.prepare("DELETE FROM sessions WHERE token = ?").run(token);
     return undefined;
   }
@@ -145,14 +153,14 @@ const getSession = (request, role) => {
   return session;
 };
 
-const createSession = ({ role, address, days = 7 }) => {
+const createUserSession = (address) => {
   const token = crypto.randomBytes(32).toString("hex");
   const createdAt = nowIso();
-  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   database.prepare(`
     INSERT INTO sessions (token, role, address, created_at, expires_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(token, role, address || null, createdAt, expiresAt);
+    VALUES (?, 'user', ?, ?, ?)
+  `).run(token, address, createdAt, expiresAt);
   return { token, expiresAt };
 };
 
@@ -184,7 +192,7 @@ const insertCheck = (record) => {
     record.score,
     record.level,
     JSON.stringify(record.categories),
-    record.createdAt
+    record.createdAt,
   );
 };
 
@@ -195,8 +203,14 @@ const insertLead = (record) => {
   `).run(record.id, record.name, record.contact, record.message, record.createdAt);
 };
 
-const getAdminData = () => {
-  const users = database.prepare(`
+const getStats = () => ({
+  users: database.prepare("SELECT COUNT(*) AS count FROM wallet_users").get().count,
+  checks: database.prepare("SELECT COUNT(*) AS count FROM checks").get().count,
+  leads: database.prepare("SELECT COUNT(*) AS count FROM leads").get().count,
+});
+
+const getRecentUsers = (limit = 10) =>
+  database.prepare(`
     SELECT
       u.address,
       u.first_seen_at AS firstSeenAt,
@@ -207,38 +221,43 @@ const getAdminData = () => {
     LEFT JOIN checks c ON c.user_wallet = u.address
     GROUP BY u.address
     ORDER BY u.last_seen_at DESC
-  `).all();
+    LIMIT ?
+  `).all(limit);
 
-  const checks = database.prepare(`
-    SELECT id, user_wallet AS userWallet, wallet, tx_hash AS txHash, score, level, categories, created_at AS createdAt
+const getRecentChecks = (limit = 10) =>
+  database.prepare(`
+    SELECT user_wallet AS userWallet, wallet, score, level, created_at AS createdAt
     FROM checks
     ORDER BY created_at DESC
-  `).all().map((row) => ({ ...row, categories: JSON.parse(row.categories) }));
+    LIMIT ?
+  `).all(limit);
 
-  const leads = database.prepare(`
-    SELECT id, name, contact, message, created_at AS createdAt
+const getRecentLeads = (limit = 10) =>
+  database.prepare(`
+    SELECT name, contact, message, created_at AS createdAt
     FROM leads
     ORDER BY created_at DESC
-  `).all();
+    LIMIT ?
+  `).all(limit);
 
-  return { users, checks, leads };
-};
-
-const buildWalletMessage = (address, nonce) => [
-  "AML Best wallet authorization",
-  "",
-  "Sign this message to prove wallet ownership and unlock free wallet checks.",
-  "This action does not transfer funds or grant spending permissions.",
-  "",
-  `Address: ${getAddress(address)}`,
-  `Nonce: ${nonce}`,
-].join("\n");
+const buildWalletMessage = (address, nonce) =>
+  [
+    "AML Best wallet authorization",
+    "",
+    "Я добровольно даю согласие на вход через Trust Wallet.",
+    "Я разрешаю AML Best обработать адрес моего кошелька, подпись входа и историю бесплатных проверок.",
+    "Я понимаю, что администратор сможет видеть эти данные в закрытом Telegram-боте.",
+    "Подпись не переводит средства и не даёт доступ к приватным ключам или списанию.",
+    "",
+    `Address: ${getAddress(address)}`,
+    `Nonce: ${nonce}`,
+  ].join("\n");
 
 const createWalletNonce = (address) => {
   const normalized = getAddress(address);
   const nonce = crypto.randomBytes(16).toString("hex");
   const message = buildWalletMessage(normalized, nonce);
-  nonces.set(normalized, { message, nonce, expiresAt: Date.now() + 5 * 60 * 1000 });
+  nonces.set(normalized, { message, expiresAt: Date.now() + 5 * 60 * 1000 });
   return { address: normalized, message, nonce };
 };
 
@@ -255,6 +274,153 @@ const scoreWallet = (wallet) => {
   return { score, level, categories };
 };
 
+const telegramRequest = async (method, body) => {
+  if (!telegramApi) return undefined;
+  const response = await fetch(`${telegramApi}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!result.ok) throw new Error(result.description || `Telegram ${method} failed`);
+  return result.result;
+};
+
+const sendTelegramMessage = async (chatId, text) => {
+  const chunks = String(text).match(/[\s\S]{1,3900}/g) || [""];
+  for (const chunk of chunks) {
+    await telegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: chunk,
+      disable_web_page_preview: true,
+    });
+  }
+};
+
+const notifyTelegramAdmins = (text) => {
+  if (!telegramToken || telegramAdminIds.size === 0) return;
+  for (const chatId of telegramAdminIds) {
+    sendTelegramMessage(chatId, text).catch((error) => {
+      console.error("Telegram notification error:", error.message);
+    });
+  }
+};
+
+const formatDate = (value) => new Date(value).toLocaleString("ru-RU", { timeZone: "Europe/Samara" });
+
+const buildTelegramReply = (command) => {
+  if (command === "/start" || command === "/help") {
+    return [
+      "AML Best Admin",
+      "",
+      "/stats - общая статистика",
+      "/users - последние пользователи",
+      "/checks - последние проверки",
+      "/leads - последние заявки",
+      "/myid - ваш Telegram chat ID",
+    ].join("\n");
+  }
+
+  if (command === "/stats") {
+    const stats = getStats();
+    return `Статистика AML Best\n\nПользователи: ${stats.users}\nПроверки: ${stats.checks}\nЗаявки: ${stats.leads}`;
+  }
+
+  if (command === "/users") {
+    const users = getRecentUsers();
+    if (!users.length) return "Пользователей пока нет.";
+    return users
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.address}\nПоследний вход: ${formatDate(item.lastSeenAt)}\nВходов: ${item.loginCount}, проверок: ${item.checksCount}`,
+      )
+      .join("\n\n");
+  }
+
+  if (command === "/checks") {
+    const checks = getRecentChecks();
+    if (!checks.length) return "Проверок пока нет.";
+    return checks
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.wallet}\nПользователь: ${item.userWallet || "-"}\nРиск: ${item.level} (${item.score}/100)\nДата: ${formatDate(item.createdAt)}`,
+      )
+      .join("\n\n");
+  }
+
+  if (command === "/leads") {
+    const leads = getRecentLeads();
+    if (!leads.length) return "Заявок пока нет.";
+    return leads
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.name}\nКонтакт: ${item.contact}\nСообщение: ${item.message || "-"}\nДата: ${formatDate(item.createdAt)}`,
+      )
+      .join("\n\n");
+  }
+
+  return "Неизвестная команда. Используйте /help.";
+};
+
+const handleTelegramUpdate = async (update) => {
+  const message = update.message;
+  if (!message?.chat?.id || !message.text) return;
+
+  const chatId = String(message.chat.id);
+  const command = message.text.trim().split(/\s+/)[0].split("@")[0].toLowerCase();
+
+  if (command === "/myid") {
+    await sendTelegramMessage(chatId, `Ваш Telegram chat ID: ${chatId}`);
+    return;
+  }
+
+  if (!telegramAdminIds.has(chatId)) {
+    await sendTelegramMessage(chatId, "Доступ запрещён. Этот Telegram ID не добавлен в список администраторов.");
+    return;
+  }
+
+  await sendTelegramMessage(chatId, buildTelegramReply(command));
+};
+
+const pollTelegram = async () => {
+  if (!telegramToken) {
+    console.log("Telegram bot disabled: TELEGRAM_BOT_TOKEN is not set");
+    return;
+  }
+
+  if (telegramAdminIds.size === 0) {
+    console.warn("Telegram bot has no admins: TELEGRAM_ADMIN_CHAT_IDS is empty");
+  }
+
+  await telegramRequest("setMyCommands", {
+    commands: [
+      { command: "stats", description: "Общая статистика" },
+      { command: "users", description: "Последние пользователи" },
+      { command: "checks", description: "Последние проверки" },
+      { command: "leads", description: "Последние заявки" },
+      { command: "myid", description: "Показать Telegram ID" },
+      { command: "help", description: "Список команд" },
+    ],
+  }).catch((error) => console.error("Telegram setup error:", error.message));
+
+  while (true) {
+    try {
+      const updates = await telegramRequest("getUpdates", {
+        offset: telegramOffset,
+        timeout: 25,
+        allowed_updates: ["message"],
+      });
+      for (const update of updates || []) {
+        telegramOffset = update.update_id + 1;
+        await handleTelegramUpdate(update);
+      }
+    } catch (error) {
+      console.error("Telegram polling error:", error.message);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+};
+
 const handleApi = async (request, response, pathname) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, getCorsHeaders(request));
@@ -263,7 +429,11 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "GET" && pathname === "/api/health") {
-    return sendJson(request, response, 200, { ok: true, time: nowIso() });
+    return sendJson(request, response, 200, {
+      ok: true,
+      time: nowIso(),
+      telegramBot: Boolean(telegramToken),
+    });
   }
 
   if (request.method === "POST" && pathname === "/api/auth/nonce") {
@@ -287,19 +457,25 @@ const handleApi = async (request, response, pathname) => {
       return sendJson(request, response, 400, { error: "Nonce истёк. Подключите кошелёк ещё раз" });
     }
 
-    const recovered = getAddress(verifyMessage(nonceRecord.message, signature));
+    let recovered;
+    try {
+      recovered = getAddress(verifyMessage(nonceRecord.message, signature));
+    } catch {
+      return sendJson(request, response, 401, { error: "Некорректная подпись" });
+    }
     if (recovered !== normalized) {
       return sendJson(request, response, 401, { error: "Подпись не совпадает с адресом кошелька" });
     }
 
     nonces.delete(normalized);
     upsertWalletUser(normalized);
-    const session = createSession({ role: "user", address: normalized });
+    const session = createUserSession(normalized);
+    notifyTelegramAdmins(`Новый вход Trust Wallet\n\nАдрес: ${normalized}\nВремя: ${formatDate(nowIso())}`);
     return sendJson(request, response, 200, { ok: true, address: normalized, role: "user", ...session });
   }
 
   if (request.method === "GET" && pathname === "/api/auth/session") {
-    const session = getSession(request, "user");
+    const session = getUserSession(request);
     if (!session) return sendJson(request, response, 401, { error: "Пользователь не подключён" });
     return sendJson(request, response, 200, { ok: true, address: session.address, role: "user" });
   }
@@ -310,24 +486,28 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "POST" && pathname === "/api/checks") {
-    const session = getSession(request, "user");
+    const session = getUserSession(request);
     if (!session) return sendJson(request, response, 401, { error: "Сначала подключите Trust Wallet" });
 
-    const { wallet, txHash } = await readBody(request);
+    const { wallet } = await readBody(request);
     if (!wallet || String(wallet).trim().length < 8) {
       return sendJson(request, response, 400, { error: "Введите корректный адрес или tx hash" });
     }
 
-    const result = scoreWallet(String(wallet).trim());
+    const checkedWallet = String(wallet).trim();
+    const result = scoreWallet(checkedWallet);
     const record = {
       id: crypto.randomUUID(),
       userWallet: session.address,
-      wallet: String(wallet).trim(),
-      txHash: txHash || null,
+      wallet: checkedWallet,
+      txHash: null,
       ...result,
       createdAt: nowIso(),
     };
     insertCheck(record);
+    notifyTelegramAdmins(
+      `Новая проверка\n\nПользователь: ${record.userWallet}\nАдрес/hash: ${record.wallet}\nРиск: ${record.level} (${record.score}/100)`,
+    );
     return sendJson(request, response, 201, record);
   }
 
@@ -344,27 +524,10 @@ const handleApi = async (request, response, pathname) => {
       createdAt: nowIso(),
     };
     insertLead(record);
+    notifyTelegramAdmins(
+      `Новая заявка\n\nИмя: ${record.name}\nКонтакт: ${record.contact}\nСообщение: ${record.message || "-"}`,
+    );
     return sendJson(request, response, 201, record);
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/login") {
-    const { username, password } = await readBody(request);
-    if (username !== adminUser || password !== adminPassword) {
-      return sendJson(request, response, 401, { error: "Неверный логин или пароль" });
-    }
-    const session = createSession({ role: "admin", days: 1 });
-    return sendJson(request, response, 200, { ok: true, role: "admin", ...session });
-  }
-
-  if (request.method === "POST" && pathname === "/api/admin/logout") {
-    deleteSession(request);
-    return sendJson(request, response, 200, { ok: true });
-  }
-
-  if (request.method === "GET" && pathname === "/api/admin/data") {
-    const session = getSession(request, "admin");
-    if (!session) return sendJson(request, response, 401, { error: "Требуется вход администратора" });
-    return sendJson(request, response, 200, getAdminData());
   }
 
   return sendJson(request, response, 404, { error: "API endpoint не найден" });
@@ -409,5 +572,5 @@ const server = http.createServer(async (request, response) => {
 ensureDb();
 server.listen(port, () => {
   console.log(`AML Best API running at http://localhost:${port}`);
-  console.log(`Admin login: ${adminUser} / ${adminPassword}`);
+  pollTelegram().catch((error) => console.error("Telegram bot stopped:", error.message));
 });
