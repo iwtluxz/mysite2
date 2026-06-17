@@ -652,6 +652,19 @@ button:disabled {
   cursor: pointer;
 }
 
+.wallet-deeplink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  border: 1px solid rgba(33, 200, 255, 0.35);
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #dff7ff;
+  background: rgba(33, 200, 255, 0.08);
+  font-weight: 800;
+}
+
 .wallet-login .form-status {
   grid-column: 1 / -1;
 }

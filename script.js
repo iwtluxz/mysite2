@@ -9,6 +9,7 @@ const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
 const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
 const userWalletLogin = document.querySelector("[data-user-wallet-login]");
+const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
 
 const requestJson = async (url, options = {}) => {
@@ -157,10 +158,23 @@ const getTrustProvider = () => {
   return window.ethereum;
 };
 
+const getTrustDeeplink = () => {
+  const currentUrl = window.location.href;
+  return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
+};
+
+const showTrustDeeplink = () => {
+  if (!trustDeeplink) return;
+  trustDeeplink.href = getTrustDeeplink();
+  trustDeeplink.hidden = false;
+};
+
 const connectUserWallet = async () => {
   const provider = getTrustProvider();
   if (!provider) {
-    throw new Error("Trust Wallet не найден. Откройте сайт во встроенном браузере Trust Wallet или установите расширение.");
+    showTrustDeeplink();
+    window.location.href = getTrustDeeplink();
+    throw new Error("Открываем страницу внутри Trust Wallet. Если переход не сработал, нажмите ссылку ниже.");
   }
 
   const accounts = await provider.request({ method: "eth_requestAccounts" });
@@ -189,6 +203,8 @@ const connectUserWallet = async () => {
 
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
+
+showTrustDeeplink();
 
 userWalletConnect?.addEventListener("click", async () => {
   userWalletConnect.disabled = true;
