@@ -10,9 +10,10 @@ const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
 const userConsent = document.querySelector("[data-user-consent]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
-const tronWalletLink = document.querySelector("[data-tron-wallet-link]");
-const walletNetwork = document.querySelector("[data-wallet-network]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
+const tronPublicForm = document.querySelector("[data-tron-public-form]");
+const tronPublicStatus = document.querySelector("[data-tron-public-status]");
+const tronPublicResult = document.querySelector("[data-tron-public-result]");
 
 const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
@@ -155,15 +156,6 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-const walletLabels = {
-  evm: "Ethereum / EVM",
-  tron: "TRON USDT TRC20",
-};
-
-const getSelectedWalletChain = () => (walletNetwork?.value === "tron" ? "tron" : "evm");
-
-const getWalletLabel = (chain = getSelectedWalletChain()) => walletLabels[chain] || walletLabels.evm;
-
 const unlockCheckForm = (address) => {
   if (!checkForm) return;
   checkForm.classList.remove("is-locked");
@@ -185,7 +177,7 @@ const lockCheckForm = () => {
   checkForm.querySelectorAll("input, button").forEach((control) => {
     control.disabled = true;
   });
-  if (checkLockNote) checkLockNote.textContent = "Сначала выберите сеть, подтвердите согласие и подключите кошелёк через кнопку Connect.";
+  if (checkLockNote) checkLockNote.textContent = "Сначала подтвердите согласие и подключите Trust Wallet/MetaMask через кнопку Connect.";
   if (userLogout) userLogout.hidden = true;
 };
 
@@ -264,22 +256,9 @@ const getTrustDeeplink = () => {
 };
 
 const showWalletLinks = () => {
-  const chain = getSelectedWalletChain();
-  if (trustDeeplink) {
-    trustDeeplink.href = getTrustDeeplink();
-    trustDeeplink.hidden = chain !== "evm";
-  }
-  if (tronWalletLink) {
-    tronWalletLink.hidden = chain !== "tron";
-  }
-};
-
-const waitForTronWeb = async () => {
-  for (let index = 0; index < 20; index += 1) {
-    if (window.tronWeb?.defaultAddress?.base58) return window.tronWeb;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  return window.tronWeb;
+  if (!trustDeeplink) return;
+  trustDeeplink.href = getTrustDeeplink();
+  trustDeeplink.hidden = false;
 };
 
 const connectEvmWallet = async () => {
@@ -306,40 +285,6 @@ const connectEvmWallet = async () => {
   });
 };
 
-const connectTronWallet = async () => {
-  if (!window.tronLink && !window.tronWeb) {
-    throw new Error("Для TRON USDT установите TronLink и откройте сайт в браузере с этим расширением/кошельком.");
-  }
-
-  if (window.tronLink?.request) {
-    const connectResult = await window.tronLink.request({ method: "tron_requestAccounts" });
-    if (connectResult?.code && connectResult.code !== 200) {
-      throw new Error(connectResult.message || "TronLink не подключил кошелёк");
-    }
-  }
-
-  const tronWeb = await waitForTronWeb();
-  const address = tronWeb?.defaultAddress?.base58;
-  if (!tronWeb || !address) {
-    throw new Error("TronLink не вернул TRON адрес. Разблокируйте TronLink и разрешите подключение сайта.");
-  }
-
-  const nonce = await requestJson("/api/auth/nonce", {
-    method: "POST",
-    body: JSON.stringify({ chain: "tron", address }),
-  });
-
-  if (!tronWeb.trx?.signMessageV2) {
-    throw new Error("TronLink устарел: нужна поддержка signMessageV2.");
-  }
-
-  const signature = await tronWeb.trx.signMessageV2(nonce.message);
-  return requestJson("/api/auth/wallet", {
-    method: "POST",
-    body: JSON.stringify({ chain: "tron", token: "USDT_TRC20", address, signature }),
-  });
-};
-
 const connectUserWallet = async () => {
   if (userConsent && !userConsent.checked) {
     throw new Error("Перед подключением нужно явно подтвердить согласие. Без согласия вход и доступ к данным не выполняются.");
@@ -351,18 +296,17 @@ const connectUserWallet = async () => {
   const health = await requestJson("/api/health");
   if (!health.ok) throw new Error("Backend не готов к авторизации.");
 
-  return getSelectedWalletChain() === "tron" ? connectTronWallet() : connectEvmWallet();
+  return connectEvmWallet();
 };
 
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
 showWalletLinks();
 
-walletNetwork?.addEventListener("change", showWalletLinks);
 
 userWalletConnect?.addEventListener("click", async () => {
   userWalletConnect.disabled = true;
-  userWalletStatus.textContent = `Откройте ${getWalletLabel()} и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.`;
+  userWalletStatus.textContent = "Откройте Trust Wallet/MetaMask и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.";
 
   try {
     const result = await connectUserWallet();
@@ -410,6 +354,52 @@ checkForm?.addEventListener("submit", async (event) => {
   } finally {
     button.disabled = false;
     button.textContent = "Проверить бесплатно";
+  }
+});
+
+tronPublicForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = tronPublicForm.querySelector("button");
+  const address = new FormData(tronPublicForm).get("tronAddress")?.trim();
+  const stored = getStoredSession(userSessionKey);
+
+  if (!address) {
+    tronPublicStatus.textContent = "Вставьте TRON-адрес из Trust Wallet.";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Проверяем...";
+  tronPublicStatus.textContent = "Проверяем публичный баланс USDT TRC20...";
+  if (tronPublicResult) tronPublicResult.hidden = true;
+
+  try {
+    if (!useBackend) {
+      throw new Error("Backend не подключён. Проверка TRON USDT работает только через сервер.");
+    }
+
+    const result = await requestJson("/api/tron/usdt-balance", {
+      method: "POST",
+      token: stored?.token,
+      body: JSON.stringify({ address }),
+    });
+
+    tronPublicStatus.textContent = `TRON USDT TRC20: ${result.balance} USDT`;
+    if (tronPublicResult) {
+      tronPublicResult.hidden = false;
+      tronPublicResult.querySelector("strong").textContent = `USDT TRC20: ${result.balance} USDT`;
+      tronPublicResult.querySelector("p").textContent = `Адрес: ${result.address}. Это публичная проверка баланса, без подписи и без доступа к кошельку.`;
+    }
+  } catch (error) {
+    tronPublicStatus.textContent = error.message;
+    if (tronPublicResult) {
+      tronPublicResult.hidden = false;
+      tronPublicResult.querySelector("strong").textContent = "Ошибка TRON-проверки";
+      tronPublicResult.querySelector("p").textContent = error.message;
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = "Проверить USDT TRC20";
   }
 });
 

