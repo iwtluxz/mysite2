@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Бесплатная проверка кошелька | AML Best</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" data-header>
+      <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="active" href="check.html">Проверка</a>
+        <a href="features.html">Возможности</a>
+        <a href="pricing.html">Тарифы</a>
+        <a href="contacts.html">Контакты</a>
+        <a href="admin.html">Админ</a>
+      </nav>
+      <button class="header-cta as-button" data-user-logout hidden>Выйти</button>
+    </header>
+
+    <main class="page-main">
+      <section class="section split page-hero">
+        <div class="section-copy">
+          <p class="section-kicker">Вход через Trust Wallet</p>
+          <h1 class="page-title">Сначала подключите кошелёк, потом проверяйте адреса бесплатно</h1>
+          <p>
+            Нажмите Connect Trust Wallet. На телефоне откроется Trust Wallet, где пользователь
+            подтвердит подключение и подпишет одноразовое сообщение. Если Face ID или биометрия
+            включены в Trust Wallet, приложение само покажет это подтверждение.
+          </p>
+        </div>
+
+        <div class="check-stack">
+          <div class="wallet-login" data-user-wallet-login>
+            <div>
+              <h2>Connect Trust Wallet</h2>
+              <p>Подключение нужно только для входа. Сайт не запрашивает перевод и не получает разрешение на списание.</p>
+              <p class="wallet-address" data-user-wallet-address></p>
+            </div>
+            <button type="button" data-user-wallet-connect>Connect</button>
+            <p class="form-status" data-user-wallet-status></p>
+          </div>
+
+          <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">
+            <label for="wallet">Адрес кошелька или tx hash для проверки</label>
+            <div class="input-row">
+              <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
+              <button type="submit" disabled>Проверить бесплатно</button>
+            </div>
+            <p class="form-note" data-check-lock-note>Сначала подключите Trust Wallet через кнопку Connect.</p>
+
+            <div class="risk-preview" data-risk-preview>
+              <div class="risk-meter">
+                <span></span>
+              </div>
+              <div class="risk-meta">
+                <strong>Ожидает подключения</strong>
+                <p>После входа через Trust Wallet здесь появится бесплатная оценка риска.</p>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>© 2026 AML Best</span>
+      <span>Проверка доступна после входа через Trust Wallet</span>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

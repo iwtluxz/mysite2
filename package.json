@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0"
+  },
+  "overrides": {
+    "ws": "8.21.0"
+  }
+}

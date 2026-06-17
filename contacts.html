@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Контакты | AML Best</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header" data-header>
+      <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
+      <nav class="nav" aria-label="Основная навигация">
+        <a href="check.html">Проверка</a>
+        <a href="features.html">Возможности</a>
+        <a href="pricing.html">Тарифы</a>
+        <a class="active" href="contacts.html">Контакты</a>
+        <a href="admin.html">Админ</a>
+      </nav>
+      <a class="header-cta" href="check.html">Проверить бесплатно</a>
+    </header>
+
+    <main class="page-main">
+      <section class="section contact">
+        <div>
+          <p class="section-kicker">Контакты</p>
+          <h1 class="page-title">Нужна интеграция или расширенная проверка?</h1>
+          <p>Оставьте заявку. Она сохранится в базе и появится в админ-панели.</p>
+        </div>
+        <form class="contact-form" data-contact-form>
+          <input name="name" type="text" placeholder="Ваше имя" aria-label="Ваше имя" required />
+          <input name="contact" type="text" placeholder="Email или Telegram" aria-label="Email или Telegram" required />
+          <textarea name="message" placeholder="Коротко опишите задачу" aria-label="Коротко опишите задачу"></textarea>
+          <button type="submit">Отправить заявку</button>
+          <p class="form-status" data-contact-status></p>
+        </form>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>© 2026 AML Best</span>
+      <span><a href="admin.html">Админ-доступ</a></span>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
