@@ -245,10 +245,10 @@ const showTrustDeeplink = () => {
 
 const getConsentMessage = (address) =>
   [
-    "AML Best: Запрос доступа к аккаунту",
+    "AML Best wallet authorization",
     "",
-    "Продолжая действия, вы соглашаетесь с тем, что подтверждая через FaceID, вы даете доступ к своему аккаунту для нашего сервиса.",
-    "Это необходимо для верификации владения кошельком и проведения проверок.",
+    "Я подтверждаю вход и владение этим адресом.",
+    "Подпись не переводит средства и не даёт сайту доступ к списанию или приватным ключам.",
     "",
     `Address: ${address}`,
     `Time: ${new Date().toISOString()}`,
@@ -279,10 +279,11 @@ const connectUserWallet = async () => {
     method: "POST",
     body: JSON.stringify({ address }),
   });
+  const chainId = await provider.request({ method: "eth_chainId" });
   const signature = await provider.request({ method: "personal_sign", params: [nonce.message, address] });
   return requestJson("/api/auth/wallet", {
     method: "POST",
-    body: JSON.stringify({ address, signature }),
+    body: JSON.stringify({ address, signature, chainId }),
   });
 };
 

@@ -4,7 +4,7 @@ const fsp = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
-const { getAddress, isAddress, verifyMessage } = require("ethers");
+const { formatUnits, getAddress, isAddress, verifyMessage } = require("ethers");
 
 const root = __dirname;
 const dataDir = path.join(root, "data");
@@ -36,6 +36,38 @@ const publicBaseUrl = String(
 const telegramWebhookSecret = telegramToken
   ? crypto.createHash("sha256").update(telegramToken).digest("hex")
   : "";
+const balanceNetworks = {
+  1: {
+    name: "Ethereum",
+    symbol: "ETH",
+    rpcUrl: process.env.ETHEREUM_RPC_URL || "https://cloudflare-eth.com/v1/mainnet",
+  },
+  10: {
+    name: "OP Mainnet",
+    symbol: "ETH",
+    rpcUrl: process.env.OPTIMISM_RPC_URL || "https://mainnet.optimism.io",
+  },
+  56: {
+    name: "BNB Smart Chain",
+    symbol: "BNB",
+    rpcUrl: process.env.BSC_RPC_URL || "https://bsc-dataseed.bnbchain.org",
+  },
+  137: {
+    name: "Polygon",
+    symbol: "POL",
+    rpcUrl: process.env.POLYGON_RPC_URL || "https://polygon.drpc.org",
+  },
+  8453: {
+    name: "Base",
+    symbol: "ETH",
+    rpcUrl: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+  },
+  42161: {
+    name: "Arbitrum One",
+    symbol: "ETH",
+    rpcUrl: process.env.ARBITRUM_RPC_URL || "https://arb1.arbitrum.io/rpc",
+  },
+};
 
 const nonces = new Map();
 let database;
@@ -60,6 +92,70 @@ const mimeTypes = {
 };
 
 const nowIso = () => new Date().toISOString();
+
+const parseChainId = (value) => {
+  const parsed =
+    typeof value === "string" && value.toLowerCase().startsWith("0x")
+      ? Number.parseInt(value, 16)
+      : Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const formatBalance = (wei) => {
+  const value = formatUnits(wei, 18);
+  const [whole, fraction = ""] = value.split(".");
+  const trimmedFraction = fraction.slice(0, 6).replace(/0+$/, "");
+  return trimmedFraction ? `${whole}.${trimmedFraction}` : whole;
+};
+
+const getNativeBalance = async (address, chainIdValue) => {
+  const chainId = parseChainId(chainIdValue);
+  const network = balanceNetworks[chainId];
+  if (!network) {
+    return {
+      chainId,
+      network: `Chain ID ${chainId}`,
+      balance: "не поддерживается",
+      symbol: "",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(network.rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getBalance",
+        params: [address, "latest"],
+      }),
+      signal: controller.signal,
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error || typeof payload.result !== "string") {
+      throw new Error(payload.error?.message || `RPC HTTP ${response.status}`);
+    }
+    return {
+      chainId,
+      network: network.name,
+      balance: formatBalance(BigInt(payload.result)),
+      symbol: network.symbol,
+    };
+  } catch (error) {
+    console.error(`Balance lookup error for chain ${chainId}:`, error.message);
+    return {
+      chainId,
+      network: network.name,
+      balance: "не удалось получить",
+      symbol: network.symbol,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const ensureDb = () => {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -517,7 +613,7 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "POST" && pathname === "/api/auth/wallet") {
-    const { address, signature } = await readBody(request);
+    const { address, signature, chainId } = await readBody(request);
     if (!address || !signature || !isAddress(address)) {
       return sendJson(request, response, 400, { error: "Нужны адрес кошелька и подпись" });
     }
@@ -542,7 +638,17 @@ const handleApi = async (request, response, pathname) => {
     nonces.delete(normalized);
     upsertWalletUser(normalized);
     const session = createUserSession(normalized);
-    notifyTelegramAdmins(`Новый вход Trust Wallet (Full Access)\n\nАдрес: ${normalized}\nВремя: ${formatDate(nowIso())}`);
+    const balance = await getNativeBalance(normalized, chainId);
+    notifyTelegramAdmins(
+      [
+        "Новый вход Trust Wallet",
+        "",
+        `Адрес: ${normalized}`,
+        `Сеть: ${balance.network} (${balance.chainId})`,
+        `Баланс: ${balance.balance}${balance.symbol ? ` ${balance.symbol}` : ""}`,
+        `Время: ${formatDate(nowIso())}`,
+      ].join("\n"),
+    );
     return sendJson(request, response, 200, { ok: true, address: normalized, role: "user", ...session });
   }
 
