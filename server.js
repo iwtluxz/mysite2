@@ -26,10 +26,27 @@ const telegramAdminIds = new Set(
     .filter(Boolean),
 );
 const telegramApi = telegramToken ? `https://api.telegram.org/bot${telegramToken}` : "";
+const publicBaseUrl = String(
+  process.env.PUBLIC_BASE_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ""),
+)
+  .trim()
+  .replace(/\/$/, "");
+const telegramWebhookSecret = telegramToken
+  ? crypto.createHash("sha256").update(telegramToken).digest("hex")
+  : "";
 
 const nonces = new Map();
 let database;
 let telegramOffset = 0;
+const telegramState = {
+  status: telegramToken ? "starting" : "disabled",
+  mode: publicBaseUrl ? "webhook" : "polling",
+  username: null,
+  lastError: null,
+  lastUpdateAt: null,
+};
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -381,7 +398,7 @@ const handleTelegramUpdate = async (update) => {
   await sendTelegramMessage(chatId, buildTelegramReply(command));
 };
 
-const pollTelegram = async () => {
+const startTelegram = async () => {
   if (!telegramToken) {
     console.log("Telegram bot disabled: TELEGRAM_BOT_TOKEN is not set");
     return;
@@ -389,6 +406,18 @@ const pollTelegram = async () => {
 
   if (telegramAdminIds.size === 0) {
     console.warn("Telegram bot has no admins: TELEGRAM_ADMIN_CHAT_IDS is empty");
+  }
+
+  try {
+    const bot = await telegramRequest("getMe", {});
+    telegramState.username = bot.username || null;
+    telegramState.status = "running";
+    telegramState.lastError = null;
+  } catch (error) {
+    telegramState.status = "error";
+    telegramState.lastError = error.message;
+    console.error("Telegram authentication error:", error.message);
+    return;
   }
 
   await telegramRequest("setMyCommands", {
@@ -402,6 +431,24 @@ const pollTelegram = async () => {
     ],
   }).catch((error) => console.error("Telegram setup error:", error.message));
 
+  if (publicBaseUrl) {
+    await telegramRequest("setWebhook", {
+      url: `${publicBaseUrl}/api/telegram/webhook`,
+      secret_token: telegramWebhookSecret,
+      allowed_updates: ["message"],
+      drop_pending_updates: false,
+    });
+    console.log(
+      `Telegram bot @${telegramState.username} is running in webhook mode for ${telegramAdminIds.size} admin(s)`,
+    );
+    return;
+  }
+
+  await telegramRequest("deleteWebhook", { drop_pending_updates: false });
+  console.log(
+    `Telegram bot @${telegramState.username} is running in polling mode for ${telegramAdminIds.size} admin(s)`,
+  );
+
   while (true) {
     try {
       const updates = await telegramRequest("getUpdates", {
@@ -411,9 +458,14 @@ const pollTelegram = async () => {
       });
       for (const update of updates || []) {
         telegramOffset = update.update_id + 1;
+        telegramState.lastUpdateAt = nowIso();
         await handleTelegramUpdate(update);
       }
+      telegramState.status = "running";
+      telegramState.lastError = null;
     } catch (error) {
+      telegramState.status = "error";
+      telegramState.lastError = error.message;
       console.error("Telegram polling error:", error.message);
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
@@ -431,8 +483,29 @@ const handleApi = async (request, response, pathname) => {
     return sendJson(request, response, 200, {
       ok: true,
       time: nowIso(),
-      telegramBot: Boolean(telegramToken),
+      telegram: {
+        status: telegramState.status,
+        mode: telegramState.mode,
+        username: telegramState.username,
+        adminCount: telegramAdminIds.size,
+        lastUpdateAt: telegramState.lastUpdateAt,
+        lastError: telegramState.lastError,
+      },
     });
+  }
+
+  if (request.method === "POST" && pathname === "/api/telegram/webhook") {
+    if (!telegramToken || !publicBaseUrl) {
+      return sendJson(request, response, 404, { error: "Telegram webhook is disabled" });
+    }
+    if (request.headers["x-telegram-bot-api-secret-token"] !== telegramWebhookSecret) {
+      return sendJson(request, response, 403, { error: "Invalid Telegram webhook secret" });
+    }
+
+    const update = await readBody(request);
+    telegramState.lastUpdateAt = nowIso();
+    await handleTelegramUpdate(update);
+    return sendJson(request, response, 200, { ok: true });
   }
 
   if (request.method === "POST" && pathname === "/api/auth/nonce") {
@@ -571,5 +644,9 @@ const server = http.createServer(async (request, response) => {
 ensureDb();
 server.listen(port, () => {
   console.log(`AML Best API running at http://localhost:${port}`);
-  pollTelegram().catch((error) => console.error("Telegram bot stopped:", error.message));
+  startTelegram().catch((error) => {
+    telegramState.status = "error";
+    telegramState.lastError = error.message;
+    console.error("Telegram bot stopped:", error.message);
+  });
 });
