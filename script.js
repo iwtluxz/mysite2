@@ -247,9 +247,11 @@ const getConsentMessage = (address) =>
   [
     "AML Best wallet authorization",
     "",
-    "Я подтверждаю вход и даю согласие на обработку адреса кошелька, подписи входа и истории проверок.",
-    "Подпись доказывает владение кошельком и не переводит средства.",
-    "Сайт не получает приватные ключи, seed-фразу или разрешение на списание.",
+    "Я добровольно даю согласие на вход через Trust Wallet.",
+    "Я разрешаю AML Best обработать адрес моего кошелька, подпись входа и историю бесплатных проверок.",
+    "Я понимаю, что администратор сможет видеть эти данные в админ-панели.",
+    "Подпись доказывает владение кошельком, не переводит средства и не даёт доступ к списанию.",
+    "Сайт не получает приватные ключи, seed-фразу или полный доступ к аккаунту Trust Wallet.",
     "",
     `Address: ${address}`,
     `Time: ${new Date().toISOString()}`,
@@ -257,7 +259,7 @@ const getConsentMessage = (address) =>
 
 const connectUserWallet = async () => {
   if (userConsent && !userConsent.checked) {
-    throw new Error("Перед подключением подтвердите согласие на обработку данных.");
+    throw new Error("Перед подключением нужно явно подтвердить согласие. Без согласия вход и доступ к данным не выполняются.");
   }
 
   const provider = getTrustProvider();
@@ -293,7 +295,7 @@ showTrustDeeplink();
 
 userWalletConnect?.addEventListener("click", async () => {
   userWalletConnect.disabled = true;
-  userWalletStatus.textContent = "Откройте Trust Wallet и подтвердите подключение/подпись...";
+  userWalletStatus.textContent = "Откройте Trust Wallet и подпишите согласие. Это не переводит средства и не даёт доступ к списанию.";
 
   try {
     const result = await connectUserWallet();

@@ -573,7 +573,7 @@ button:disabled {
 }
 
 .price-card li::before {
-  content: "•";
+  content: "-";
   margin-right: 10px;
   color: var(--teal);
 }
@@ -660,6 +660,14 @@ button:disabled {
   height: 18px;
   margin: 2px 0 0;
   accent-color: var(--teal);
+}
+
+.consent-notice {
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 184, 77, 0.28);
+  border-radius: 8px;
+  color: #ffe3af;
+  background: rgba(255, 184, 77, 0.08);
 }
 
 .wallet-login button,

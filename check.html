@@ -29,6 +29,10 @@
             подтвердит подключение и подпишет одноразовое сообщение. Если Face ID или биометрия
             включены в Trust Wallet, приложение само покажет это подтверждение.
           </p>
+          <p class="consent-notice">
+            Без явного согласия вход не выполняется. Согласие касается только обработки адреса,
+            подписи входа и истории проверок; сайт не получает контроль над кошельком.
+          </p>
         </div>
 
         <div class="check-stack">
@@ -41,8 +45,9 @@
             <label class="consent-row">
               <input type="checkbox" data-user-consent />
               <span>
-                Продолжая, вы даёте согласие на обработку адреса кошелька, подписи входа и истории проверок.
-                Подпись подтверждает владение кошельком и не даёт сайту доступ к средствам.
+                Я даю согласие на вход через Trust Wallet и обработку адреса кошелька, подписи входа
+                и истории проверок. Мне понятно, что подпись подтверждает владение кошельком,
+                не переводит средства и не даёт сайту доступ к приватным ключам или списанию.
               </span>
             </label>
             <button type="button" data-user-wallet-connect>Connect</button>
@@ -60,7 +65,7 @@
               <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
               <button type="submit" disabled>Проверить бесплатно</button>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала подключите Trust Wallet через кнопку Connect.</p>
+            <p class="form-note" data-check-lock-note>Сначала подтвердите согласие и подключите Trust Wallet через кнопку Connect.</p>
 
             <div class="risk-preview" data-risk-preview>
               <div class="risk-meter">
@@ -81,8 +86,8 @@
       <span>Проверка доступна после входа через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=backend1"></script>
-    <script src="script.js?v=backend1"></script>
+    <script src="config.js?v=consent1"></script>
+    <script src="script.js?v=consent1"></script>
   </body>
 </html>
 
