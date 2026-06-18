@@ -25,7 +25,7 @@
           <h1 class="page-title">Сначала подключите Trust Wallet, потом проверяйте адреса бесплатно</h1>
           <p>
             Подключение выполняется через Trust Wallet или MetaMask для Ethereum/EVM-адреса.
-            После входа сайт автоматически берёт Ethereum/EVM-адрес, проверяет поддерживаемые балансы и пробует автоматически найти TRON USDT TRC20 адрес. Если Trust Wallet не отдаёт TRON-адрес странице, его можно вставить вручную.
+            Для TRON USDT TRC20 ниже можно вставить публичный адрес из Trust Wallet вручную и получить баланс без TronLink.
           </p>
           <p class="consent-notice">
             Без явного согласия вход не выполняется. Согласие касается только обработки адреса,
@@ -60,12 +60,12 @@
           <form class="check-panel tron-public-panel" data-tron-public-form aria-label="Публичная проверка TRON USDT TRC20">
             <h2>TRON USDT TRC20 из Trust Wallet</h2>
             <p class="form-note">
-              Сайт сам попробует найти TRON-адрес в кошельке и проверить USDT TRC20. Если приложение не отдаёт TRON-адрес сайту, скопируйте публичный адрес, который начинается с <strong>T</strong>, из Trust Wallet и вставьте его сюда.
+              Скопируйте в Trust Wallet публичный TRON-адрес, который начинается с <strong>T</strong>, и вставьте его сюда.
+              Это публичная проверка баланса USDT TRC20 без подписи и без подключения TronLink.
             </p>
             <label for="tronAddress">TRON-адрес для проверки</label>
             <div class="input-row">
-              <input id="tronAddress" name="tronAddress" type="text" placeholder="Автоматически или TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE" />
-              <button type="button" data-tron-auto-detect>Автонайти TRON</button>
+              <input id="tronAddress" name="tronAddress" type="text" placeholder="Например: TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE" />
               <button type="submit">Проверить USDT TRC20</button>
             </div>
             <p class="form-status" data-tron-public-status></p>
@@ -107,8 +107,8 @@
       <span>Проверка доступна после входа через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=auto-wallet2"></script>
-    <script src="script.js?v=auto-wallet2"></script>
+    <script src="config.js?v=auto-wallet-fix2"></script>
+    <script src="script.js?v=auto-wallet-fix2"></script>
   </body>
 </html>
 

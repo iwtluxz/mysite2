@@ -144,6 +144,33 @@ const formatBalance = (wei) => {
   return trimmedFraction ? `${whole}.${trimmedFraction}` : whole;
 };
 
+const parseTokenAmountToRaw = (value, decimals = 6, humanReadable = false) => {
+  if (value === undefined || value === null || value === "") return 0n;
+
+  let text = String(value).trim();
+  if (!text) return 0n;
+
+  if (text.startsWith("0x") || text.startsWith("0X")) return BigInt(text);
+
+  // Some explorers return human values like "3.12" in `amount`/`quantity`,
+  // while contract and TronGrid return raw integers like "3120000".
+  if (humanReadable || text.includes(".")) {
+    if (text.includes("e") || text.includes("E")) {
+      const numeric = Number(text);
+      if (!Number.isFinite(numeric)) return 0n;
+      text = numeric.toFixed(decimals);
+    }
+
+    const [wholeRaw, fractionRaw = ""] = text.split(".");
+    const whole = wholeRaw.replace(/[^0-9]/g, "") || "0";
+    const fraction = fractionRaw.replace(/[^0-9]/g, "").padEnd(decimals, "0").slice(0, decimals);
+    return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction || "0");
+  }
+
+  const digits = text.replace(/[^0-9]/g, "");
+  return digits ? BigInt(digits) : 0n;
+};
+
 const formatTokenUnits = (value, decimals = 6) => {
   const amount = BigInt(value);
   const base = 10n ** BigInt(decimals);
@@ -154,28 +181,71 @@ const formatTokenUnits = (value, decimals = 6) => {
 
 const getTronHeaders = () => ({
   "Content-Type": "application/json",
+  Accept: "application/json",
   ...(tronProApiKey ? { "TRON-PRO-API-KEY": tronProApiKey } : {}),
 });
 
-const withTimeout = (timeoutMs = 6000) => AbortSignal.timeout(timeoutMs);
+const withTimeout = (timeoutMs = 9000) => AbortSignal.timeout(timeoutMs);
+
+const tokenLooksLikeUsdt = (token) => {
+  if (!token || typeof token !== "object") return false;
+  if (token[tronUsdtContract] !== undefined) return true;
+
+  const tokenId = String(
+    token.tokenId ||
+      token.token_id ||
+      token.contract_address ||
+      token.contractAddress ||
+      token.address ||
+      token.tokenAddress ||
+      token.id ||
+      "",
+  );
+  const tokenAbbr = String(token.tokenAbbr || token.tokenName || token.symbol || token.name || "").toUpperCase();
+
+  return tokenId === tronUsdtContract || tokenAbbr === "USDT" || tokenAbbr === "TETHER USD";
+};
 
 const parseTronTokenBalance = (payload) => {
-  const account = payload?.data?.[0] || payload;
-  const tokens = Array.isArray(account?.trc20) ? account.trc20 : [];
+  const candidates = [];
+  const addArray = (value) => {
+    if (Array.isArray(value)) candidates.push(...value);
+  };
 
-  for (const token of tokens) {
+  addArray(payload?.data);
+  addArray(payload?.data?.[0]?.trc20);
+  addArray(payload?.trc20);
+  addArray(payload?.tokens);
+  addArray(payload?.balances);
+  addArray(payload?.withPriceTokens);
+  addArray(payload?.trc20token_balances);
+
+  // TronGrid /v1/accounts/{address} returns { data: [{ trc20: [{ CONTRACT: "raw" }] }] }
+  // TronGrid /trc20/balance returns { data: [{ CONTRACT: "raw" }] }
+  for (const token of candidates) {
     if (!token || typeof token !== "object") continue;
-    const directValue = token[tronUsdtContract];
-    if (directValue !== undefined) return BigInt(String(directValue));
+    if (token[tronUsdtContract] !== undefined) {
+      return parseTokenAmountToRaw(token[tronUsdtContract], tronUsdtDecimals);
+    }
   }
 
-  const tronscanTokens = Array.isArray(payload?.data) ? payload.data : [];
-  for (const token of tronscanTokens) {
-    const tokenId = token.tokenId || token.token_id || token.contract_address || token.address;
-    const tokenAbbr = String(token.tokenAbbr || token.tokenName || token.symbol || "").toUpperCase();
-    if (tokenId === tronUsdtContract || tokenAbbr === "USDT") {
-      const raw = token.balance ?? token.quantity ?? token.amount ?? 0;
-      return BigInt(String(raw));
+  // TronScan /api/account/tokens returns token rows with tokenId/tokenAbbr and balance fields.
+  for (const token of candidates) {
+    if (!tokenLooksLikeUsdt(token)) continue;
+
+    const decimals = Number(token.tokenDecimal ?? token.decimals ?? tronUsdtDecimals) || tronUsdtDecimals;
+    const rawFields = [token.balance, token.rawBalance, token.amountInSun, token.amountInSmallestUnit];
+    for (const value of rawFields) {
+      if (value !== undefined && value !== null && value !== "") {
+        return parseTokenAmountToRaw(value, decimals, false);
+      }
+    }
+
+    const humanFields = [token.amount, token.quantity, token.value, token.tokenAmount];
+    for (const value of humanFields) {
+      if (value !== undefined && value !== null && value !== "") {
+        return parseTokenAmountToRaw(value, decimals, true);
+      }
     }
   }
 
@@ -270,65 +340,77 @@ const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
 };
 
 const getTronUsdtBalance = async (address) => {
+  const normalized = String(address || "").trim();
   const errors = [];
 
+  const makeResult = (source, raw) => ({
+    ok: true,
+    source,
+    network: "TRON",
+    token: "USDT TRC20",
+    contract: tronUsdtContract,
+    balance: formatTokenUnits(raw, tronUsdtDecimals),
+    rawBalance: raw,
+  });
+
+  // 1) The most precise method: direct TRC20 balanceOf(address) call.
   try {
     const contract = await tronWeb.contract().at(tronUsdtContract);
-    const rawBalance = await contract.balanceOf(address).call();
-    const raw = BigInt(rawBalance.toString());
-    return {
-      ok: true,
-      source: "tronweb-contract",
-      network: "TRON",
-      token: "USDT TRC20",
-      contract: tronUsdtContract,
-      balance: formatTokenUnits(raw, tronUsdtDecimals),
-      rawBalance: raw,
-    };
+    const rawBalance = await contract.balanceOf(normalized).call();
+    const raw = parseTokenAmountToRaw(rawBalance?.toString?.() ?? rawBalance, tronUsdtDecimals);
+    return makeResult("tronweb-contract-balanceOf", raw);
   } catch (error) {
-    errors.push(`tronweb: ${error.message}`);
+    errors.push(`tronweb balanceOf: ${error.message}`);
   }
 
+  // 2) TronGrid indexed TRC20 balance endpoint.
   try {
-    const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(address)}`, {
+    const response = await fetch(
+      `${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}/trc20/balance?contract_address=${encodeURIComponent(tronUsdtContract)}&limit=50`,
+      { headers: getTronHeaders(), signal: withTimeout() },
+    );
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
+    }
+    const raw = parseTronTokenBalance(payload);
+    return makeResult("trongrid-trc20-balance", raw);
+  } catch (error) {
+    errors.push(`trongrid /trc20/balance: ${error.message}`);
+  }
+
+  // 3) TronGrid account endpoint. Good fallback for accounts that already have token rows indexed.
+  try {
+    const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
       headers: getTronHeaders(),
       signal: withTimeout(),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
+    }
     const raw = parseTronTokenBalance(payload);
-    return {
-      ok: true,
-      source: "trongrid-account",
-      network: "TRON",
-      token: "USDT TRC20",
-      contract: tronUsdtContract,
-      balance: formatTokenUnits(raw, tronUsdtDecimals),
-      rawBalance: raw,
-    };
+    return makeResult("trongrid-account", raw);
   } catch (error) {
-    errors.push(`trongrid: ${error.message}`);
+    errors.push(`trongrid account: ${error.message}`);
   }
 
-  try {
-    const response = await fetch(
-      `https://apilist.tronscanapi.com/api/account/tokens?address=${encodeURIComponent(address)}&start=0&limit=50&hidden=0&show=0`,
-      { signal: withTimeout() },
-    );
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.message || `HTTP ${response.status}`);
-    const raw = parseTronTokenBalance(payload);
-    return {
-      ok: true,
-      source: "tronscan-tokens",
-      network: "TRON",
-      token: "USDT TRC20",
-      contract: tronUsdtContract,
-      balance: formatTokenUnits(raw, tronUsdtDecimals),
-      rawBalance: raw,
-    };
-  } catch (error) {
-    errors.push(`tronscan: ${error.message}`);
+  // 4) TronScan public token list. It often works when TronGrid is rate-limited.
+  for (const host of ["https://apilist.tronscanapi.com", "https://apilist.tronscan.org"]) {
+    try {
+      const response = await fetch(
+        `${host}/api/account/tokens?address=${encodeURIComponent(normalized)}&start=0&limit=200&hidden=0&show=0&sortType=0&sortBy=0`,
+        { headers: { Accept: "application/json" }, signal: withTimeout() },
+      );
+      const payload = await response.json();
+      if (!response.ok || payload?.success === false) {
+        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      }
+      const raw = parseTronTokenBalance(payload);
+      return makeResult(host.includes("tronscanapi") ? "tronscanapi-account-tokens" : "tronscan-account-tokens", raw);
+    } catch (error) {
+      errors.push(`${host} account/tokens: ${error.message}`);
+    }
   }
 
   const details = errors.join("; ");
