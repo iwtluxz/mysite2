@@ -15,6 +15,9 @@ const tronPublicForm = document.querySelector("[data-tron-public-form]");
 const tronPublicStatus = document.querySelector("[data-tron-public-status]");
 const tronPublicResult = document.querySelector("[data-tron-public-result]");
 const tronAutoDetect = document.querySelector("[data-tron-auto-detect]");
+const paymentRequestPanel = document.querySelector("[data-payment-request-panel]");
+const paymentConfirm = document.querySelector("[data-payment-confirm]");
+const paymentStatus = document.querySelector("[data-payment-status]");
 
 const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
@@ -25,10 +28,14 @@ const userSessionKey = "aml_user_session";
 const adminSessionKey = "aml_admin_session";
 const localChecksKey = "aml_local_checks";
 const localLeadsKey = "aml_local_leads";
+let activePaymentRequest = null;
 
 const getStoredSession = (key) => JSON.parse(localStorage.getItem(key) || "null");
 const setStoredSession = (key, session) => localStorage.setItem(key, JSON.stringify(session));
 const clearStoredSession = (key) => localStorage.removeItem(key);
+
+const isStoredSessionExpired = (session) =>
+  Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
 const requestJson = async (url, options = {}) => {
   const token = options.token;
@@ -157,7 +164,7 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-const unlockCheckForm = (address) => {
+const unlockCheckForm = (address, { restored = false, statusMessage = "" } = {}) => {
   if (!checkForm) return;
   checkForm.classList.remove("is-locked");
   checkForm.querySelectorAll("input, button").forEach((control) => {
@@ -166,6 +173,15 @@ const unlockCheckForm = (address) => {
   if (userWalletAddress) userWalletAddress.textContent = `Подключён: ${address}`;
   if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён. Теперь можно запускать бесплатную проверку.";
   if (userLogout) userLogout.hidden = false;
+  if (userConsent) userConsent.checked = true;
+  if (userWalletConnect) userWalletConnect.textContent = "Переподключить кошелёк";
+  if (userWalletStatus) {
+    userWalletStatus.textContent =
+      statusMessage ||
+      (restored
+        ? "Профиль восстановлен. Можно продолжать проверки без повторного входа."
+        : "Профиль подключён. Сессия сохранена для следующих проверок.");
+  }
 
   const riskPreview = document.querySelector("[data-risk-preview]");
   riskPreview.querySelector("strong").textContent = "Кошелёк подключён";
@@ -180,6 +196,7 @@ const lockCheckForm = () => {
   });
   if (checkLockNote) checkLockNote.textContent = "Сначала подтвердите согласие и подключите Trust Wallet/MetaMask через кнопку Connect.";
   if (userLogout) userLogout.hidden = true;
+  if (userWalletConnect) userWalletConnect.textContent = "Connect";
 };
 
 const loadUserSession = async () => {
@@ -194,11 +211,20 @@ const loadUserSession = async () => {
   }
 
   const stored = getStoredSession(userSessionKey);
-  if (!stored?.token && !stored?.address) return lockCheckForm();
+  if (!stored?.token || isStoredSessionExpired(stored)) {
+    clearStoredSession(userSessionKey);
+    return lockCheckForm();
+  }
 
   try {
     const session = await requestJson("/api/auth/session", { token: stored.token });
-    unlockCheckForm(session.address);
+    setStoredSession(userSessionKey, {
+      token: session.token || stored.token,
+      address: session.address,
+      expiresAt: session.expiresAt || stored.expiresAt,
+    });
+    unlockCheckForm(session.address, { restored: true });
+    await loadPaymentRequest();
   } catch {
     clearStoredSession(userSessionKey);
     lockCheckForm();
@@ -294,6 +320,59 @@ const formatBalancesText = (result) => {
   return lines.length ? lines.join("; ") : "Ненулевые балансы в поддерживаемых EVM-сетях не найдены.";
 };
 
+const parseDecimalToUnits = (value, decimals) => {
+  const text = String(value || "").trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(text)) throw new Error("Некорректная сумма платежа");
+  const [whole, fraction = ""] = text.split(".");
+  if (fraction.length > decimals) throw new Error(`Слишком много знаков после запятой. Максимум: ${decimals}`);
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction.padEnd(decimals, "0") || "0");
+};
+
+const toHexQuantity = (value) => `0x${BigInt(value).toString(16)}`;
+
+const getTronWebForPayment = () => {
+  const provider = window.tronWeb || window.trustwallet?.tronWeb || window.tronLink?.tronWeb || window.tron?.tronWeb;
+  if (!provider?.defaultAddress?.base58) {
+    throw new Error("TRON-кошелёк не подключён. Откройте страницу в TronLink/Trust Wallet с доступным TRON provider.");
+  }
+  return provider;
+};
+
+const setPaymentStatus = (message) => {
+  if (paymentStatus) paymentStatus.textContent = message;
+};
+
+const renderPaymentRequest = (paymentRequest) => {
+  activePaymentRequest = paymentRequest;
+  if (!paymentRequestPanel) return;
+
+  if (!paymentRequest) {
+    paymentRequestPanel.hidden = true;
+    return;
+  }
+
+  paymentRequestPanel.hidden = false;
+  paymentRequestPanel.querySelector("[data-payment-chain]").textContent =
+    paymentRequest.chain === "evm" ? `EVM chain ${paymentRequest.chainId || 1}` : "TRON";
+  paymentRequestPanel.querySelector("[data-payment-token]").textContent = paymentRequest.token.toUpperCase();
+  paymentRequestPanel.querySelector("[data-payment-amount]").textContent = paymentRequest.amount;
+  paymentRequestPanel.querySelector("[data-payment-recipient]").textContent = paymentRequest.recipient;
+  if (paymentConfirm) paymentConfirm.hidden = paymentRequest.status !== "active";
+  setPaymentStatus("Проверьте детали и нажмите кнопку, если хотите выполнить перевод.");
+};
+
+const loadPaymentRequest = async () => {
+  if (!paymentRequestPanel || !useBackend) return;
+  try {
+    const stored = getStoredSession(userSessionKey);
+    const result = await requestJson("/api/payment-request/active", { token: stored?.token });
+    renderPaymentRequest(result.paymentRequest);
+  } catch (error) {
+    renderPaymentRequest(null);
+    setPaymentStatus(error.message);
+  }
+};
+
 const connectEvmWallet = async () => {
   const provider = getTrustProvider();
   if (!provider) {
@@ -337,6 +416,80 @@ const connectUserWallet = async () => {
   if (!health.ok) throw new Error("Backend не готов к авторизации.");
 
   return connectEvmWallet();
+};
+
+const sendEvmPayment = async (paymentRequest) => {
+  const provider = getTrustProvider();
+  if (!provider) throw new Error("EVM-кошелёк не найден. Откройте страницу в Trust Wallet/MetaMask.");
+
+  const accounts = await provider.request({ method: "eth_requestAccounts" });
+  const from = accounts?.[0];
+  if (!from) throw new Error("Кошелёк не вернул EVM-адрес");
+
+  const chainId = Number(paymentRequest.chainId || 1);
+  const chainHex = toHexQuantity(chainId);
+  const currentChain = await provider.request({ method: "eth_chainId" }).catch(() => "");
+  if (String(currentChain).toLowerCase() !== chainHex.toLowerCase()) {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
+  }
+
+  const value = parseDecimalToUnits(paymentRequest.amount, 18);
+  return provider.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from,
+        to: paymentRequest.recipient,
+        value: toHexQuantity(value),
+      },
+    ],
+  });
+};
+
+const sendTronPayment = async (paymentRequest) => {
+  const tronWebLike = getTronWebForPayment();
+  const from = tronWebLike.defaultAddress.base58;
+
+  if (paymentRequest.token === "usdt") {
+    const rawAmount = parseDecimalToUnits(paymentRequest.amount, 6).toString();
+    const contract = await tronWebLike.contract().at(paymentRequest.tronUsdtContract);
+    const txId = await contract.transfer(paymentRequest.recipient, rawAmount).send({ feeLimit: 150_000_000 });
+    return { txHash: String(txId), tronUserAddress: from };
+  }
+
+  if (paymentRequest.token === "trx") {
+    const rawAmount = parseDecimalToUnits(paymentRequest.amount, 6).toString();
+    const tx = await tronWebLike.trx.sendTransaction(paymentRequest.recipient, rawAmount);
+    return { txHash: tx?.txid || tx?.transaction?.txID || String(tx), tronUserAddress: from };
+  }
+
+  throw new Error("Неподдерживаемый TRON токен");
+};
+
+const submitPaymentTx = async ({ txHash, tronUserAddress }) => {
+  const stored = getStoredSession(userSessionKey);
+  return requestJson("/api/payment-request/tx", {
+    method: "POST",
+    token: stored?.token,
+    body: JSON.stringify({
+      id: activePaymentRequest.id,
+      txHash,
+      userWallet: stored?.address,
+      tronUserAddress,
+    }),
+  });
+};
+
+const confirmActivePayment = async () => {
+  if (!activePaymentRequest) throw new Error("Активный запрос оплаты не найден");
+
+  if (activePaymentRequest.chain === "evm") {
+    const txHash = await sendEvmPayment(activePaymentRequest);
+    return submitPaymentTx({ txHash });
+  }
+
+  const tronResult = await sendTronPayment(activePaymentRequest);
+  return submitPaymentTx(tronResult);
 };
 
 const getTronAddressFromProvider = async () => {
@@ -452,14 +605,35 @@ userWalletConnect?.addEventListener("click", async () => {
 
   try {
     const result = await connectUserWallet();
-    setStoredSession(userSessionKey, { token: result.token, address: result.address });
-    userWalletStatus.textContent = `Готово. Проверка разблокирована. ${formatBalancesText(result)}`;
-    unlockCheckForm(result.address);
+    setStoredSession(userSessionKey, {
+      token: result.token,
+      address: result.address,
+      expiresAt: result.expiresAt,
+    });
+    unlockCheckForm(result.address, {
+      statusMessage: `Готово. Профиль сохранён для следующих проверок. ${formatBalancesText(result)}`,
+    });
+    await loadPaymentRequest();
     autoDetectAndCheckTronBalance();
   } catch (error) {
     userWalletStatus.textContent = error.message;
   } finally {
     userWalletConnect.disabled = false;
+  }
+});
+
+paymentConfirm?.addEventListener("click", async () => {
+  paymentConfirm.disabled = true;
+  setPaymentStatus("Откройте кошелёк и подтвердите транзакцию. Проверьте адрес получателя и сумму перед подтверждением.");
+
+  try {
+    const result = await confirmActivePayment();
+    renderPaymentRequest(result.paymentRequest);
+    setPaymentStatus(`Транзакция отправлена: ${result.paymentRequest.txHash}`);
+  } catch (error) {
+    setPaymentStatus(error.message);
+  } finally {
+    paymentConfirm.disabled = false;
   }
 });
 
@@ -584,3 +758,4 @@ userLogout?.addEventListener("click", async () => {
 
 loadUserSession();
 loadAdmin();
+loadPaymentRequest();

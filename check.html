@@ -80,6 +80,34 @@
             </div>
           </form>
 
+          <section class="check-panel payment-request-panel" data-payment-request-panel hidden>
+            <h2>Запрос на оплату</h2>
+            <p class="form-note">
+              Это реальный перевод. Проверьте сеть, сумму и адрес получателя. Средства будут отправлены
+              только если вы сами подтвердите транзакцию в Trust Wallet/MetaMask или TRON-кошельке.
+            </p>
+            <dl class="payment-request-details">
+              <div>
+                <dt>Сеть</dt>
+                <dd data-payment-chain>-</dd>
+              </div>
+              <div>
+                <dt>Токен</dt>
+                <dd data-payment-token>-</dd>
+              </div>
+              <div>
+                <dt>Сумма</dt>
+                <dd data-payment-amount>-</dd>
+              </div>
+              <div>
+                <dt>Получатель</dt>
+                <dd data-payment-recipient>-</dd>
+              </div>
+            </dl>
+            <button type="button" data-payment-confirm>Подтвердить перевод в кошельке</button>
+            <p class="form-status" data-payment-status></p>
+          </section>
+
           <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">
             <label for="wallet">Адрес кошелька или tx hash для проверки</label>
             <div class="input-row">

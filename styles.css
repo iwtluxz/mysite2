@@ -427,6 +427,33 @@ button:disabled {
   font-size: 14px;
 }
 
+.payment-request-details {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.payment-request-details div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.payment-request-details dt {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.payment-request-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
 .risk-preview {
   display: grid;
   grid-template-columns: 112px 1fr;
