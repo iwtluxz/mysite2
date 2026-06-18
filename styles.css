@@ -876,3 +876,13 @@ td {
     flex-direction: column;
   }
 }
+
+.tron-public-panel .input-row {
+  grid-template-columns: 1fr auto auto;
+}
+
+@media (max-width: 720px) {
+  .tron-public-panel .input-row {
+    grid-template-columns: 1fr;
+  }
+}
