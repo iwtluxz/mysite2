@@ -401,10 +401,14 @@ const checkTronUsdtBalance = async (address, { auto = false } = {}) => {
       body: JSON.stringify({ address: normalized }),
     });
 
-    if (tronPublicStatus) tronPublicStatus.textContent = `TRON USDT TRC20: ${result.balance} USDT`;
+    const usdtBalance = result.usdt?.balance ?? result.balance ?? "0";
+    const trxBalance = result.trx?.balance ?? "0";
+    const statusText = `TRON: ${trxBalance} TRX; USDT TRC20: ${usdtBalance} USDT`;
+
+    if (tronPublicStatus) tronPublicStatus.textContent = statusText;
     setTronResult(
-      `USDT TRC20: ${result.balance} USDT`,
-      `Адрес: ${result.address}. Баланс получен автоматически по публичному TRON-адресу.`,
+      result.hasFunds ? "Средства на TRON-адресе найдены" : "На TRON-адресе не найдено TRX или USDT",
+      `${statusText}. Важно: сумма 3,31 $ на скрине Trust Wallet — это TRX, а не USDT TRC20.`,
     );
     return result;
   } catch (error) {
