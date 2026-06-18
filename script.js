@@ -291,7 +291,7 @@ const formatBalancesText = (result) => {
     lines.push(...tokenBalances.map((item) => `${item.network}: ${item.balance} ${item.symbol}`));
   }
 
-  return lines.length ? lines.join("; ") : "Деньги в поддерживаемых EVM-сетях не найдены. Пустые сети скрыты.";
+  return lines.length ? lines.join("; ") : "Ненулевые балансы в поддерживаемых EVM-сетях не найдены.";
 };
 
 const connectEvmWallet = async () => {

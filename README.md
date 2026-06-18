@@ -43,10 +43,3 @@ window.AML_API_BASE = "https://your-backend-url";
 ```
 
 Without `AML_API_BASE`, GitHub Pages runs in local demo mode and cannot keep a shared database or send Telegram notifications.
-
-
-## Non-zero assets scan
-
-After wallet login, the backend scans the connected EVM address across Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum One, and OP Mainnet. It returns only non-zero native balances and common stablecoins/tokens such as USDT, USDC, and DAI. Empty networks and zero balances are hidden.
-
-Trust Wallet does not expose every non-EVM coin address, such as BTC and TRON, to a normal website automatically. TRON is checked by public address: paste the TRON address that starts with `T` from Trust Wallet, and the backend checks TRX and USDT TRC20, showing only non-zero funds.

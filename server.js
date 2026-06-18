@@ -105,40 +105,6 @@ const balanceNetworks = {
   },
 };
 
-// Public token contracts to scan for the connected EVM address.
-// The site only returns non-zero balances, so empty networks/tokens are hidden.
-const evmTokenContracts = {
-  1: [
-    { symbol: "USDT", name: "Tether USD", decimals: 6, address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
-    { symbol: "USDC", name: "USD Coin", decimals: 6, address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0x6B175474E89094C44Da98b954EedeAC495271d0F" },
-  ],
-  10: [
-    { symbol: "USDT", name: "Tether USD", decimals: 6, address: "0x94b008aD8eE5F5697CcB0B98BEA8aD2c2dE9b8FE" },
-    { symbol: "USDC", name: "USD Coin", decimals: 6, address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1" },
-  ],
-  56: [
-    { symbol: "USDT", name: "Tether USD", decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955" },
-    { symbol: "USDC", name: "USD Coin", decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3" },
-  ],
-  137: [
-    { symbol: "USDT", name: "Tether USD", decimals: 6, address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" },
-    { symbol: "USDC", name: "USD Coin", decimals: 6, address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063" },
-  ],
-  8453: [
-    { symbol: "USDC", name: "USD Coin", decimals: 6, address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" },
-  ],
-  42161: [
-    { symbol: "USDT", name: "Tether USD", decimals: 6, address: "0xFd086bC7CD5C481DCC9C85ebe478A1C0b69FCbb9" },
-    { symbol: "USDC", name: "USD Coin", decimals: 6, address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
-    { symbol: "DAI", name: "Dai Stablecoin", decimals: 18, address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1" },
-  ],
-};
-
 const nonces = new Map();
 let database;
 let telegramOffset = 0;
@@ -350,83 +316,6 @@ const getNativeBalance = async (address, chainId) => {
       symbol: network.symbol,
     };
   }
-};
-
-
-const callEvmRpc = async (network, method, params) => {
-  const payload = await Promise.any(
-    network.rpcUrls.map(async (rpcUrl) => {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(4500),
-      });
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error?.message || `RPC HTTP ${response.status}`);
-      return data.result;
-    }),
-  );
-  return payload;
-};
-
-const getEvmTokenBalance = async (address, chainId, token) => {
-  const network = balanceNetworks[chainId];
-  try {
-    const paddedAddress = address.toLowerCase().replace(/^0x/, "").padStart(64, "0");
-    const data = `0x70a08231${paddedAddress}`;
-    const result = await callEvmRpc(network, "eth_call", [{ to: token.address, data }, "latest"]);
-    const raw = BigInt(result || "0x0");
-    return {
-      ok: true,
-      chainId,
-      network: network.name,
-      token: token.name,
-      symbol: token.symbol,
-      contract: token.address,
-      decimals: token.decimals,
-      balance: formatTokenUnits(raw, token.decimals),
-      rawBalance: raw,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      chainId,
-      network: network.name,
-      token: token.name,
-      symbol: token.symbol,
-      error: error instanceof AggregateError ? error.errors.map((item) => item.message).join("; ") : error.message,
-    };
-  }
-};
-
-const getNonZeroEvmTokenBalances = async (address) => {
-  const tasks = [];
-  for (const [chainIdText, tokens] of Object.entries(evmTokenContracts)) {
-    const chainId = Number(chainIdText);
-    for (const token of tokens) tasks.push(getEvmTokenBalance(address, chainId, token));
-  }
-  const results = await Promise.all(tasks);
-  const successful = results.filter((result) => result.ok);
-  return {
-    balances: successful.filter((result) => result.rawBalance > 0n).sort((left, right) => left.chainId - right.chainId || left.symbol.localeCompare(right.symbol)),
-    checkedCount: successful.length,
-    failedCount: results.length - successful.length,
-  };
-};
-
-const getNonZeroEvmAssets = async (address, preferredChainIdValue) => {
-  const [nativeScan, tokenScan] = await Promise.all([
-    getNonZeroNativeBalances(address, preferredChainIdValue),
-    getNonZeroEvmTokenBalances(address),
-  ]);
-  return {
-    nativeBalances: nativeScan.balances,
-    tokenBalances: tokenScan.balances,
-    checkedCount: nativeScan.checkedCount + tokenScan.checkedCount,
-    failedCount: nativeScan.failedCount + tokenScan.failedCount,
-    foundCount: nativeScan.balances.length + tokenScan.balances.length,
-  };
 };
 
 const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
@@ -1146,22 +1035,20 @@ const handleApi = async (request, response, pathname) => {
     let balanceLines = [];
     let balancesFound = 0;
 
-    const balanceScan = await getNonZeroEvmAssets(normalized, chainId);
-    balancesFound = balanceScan.foundCount;
-    const foundAssetLines = [
-      ...balanceScan.nativeBalances.map(
-        (balance) => `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
-      ),
-      ...balanceScan.tokenBalances.map(
-        (balance) => `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
-      ),
-    ];
-    balanceLines = foundAssetLines.length
-      ? ["Найдены ненулевые EVM-балансы:", ...foundAssetLines]
+    const balanceScan = await getNonZeroNativeBalances(normalized, chainId);
+    balancesFound = balanceScan.balances.length;
+    balanceLines = balanceScan.balances.length
+      ? [
+          "Ненулевые нативные балансы:",
+          ...balanceScan.balances.map(
+            (balance) =>
+              `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
+          ),
+        ]
       : [
           balanceScan.checkedCount
-            ? "Ненулевые балансы в поддерживаемых EVM-сетях не найдены. Пустые сети скрыты."
-            : "Не удалось получить балансы из поддерживаемых EVM-сетей.",
+            ? "Ненулевые нативные балансы в поддерживаемых сетях не найдены."
+            : "Не удалось получить балансы из поддерживаемых сетей.",
         ];
 
     const telegramNotifications = await notifyTelegramAdmins(
@@ -1184,19 +1071,13 @@ const handleApi = async (request, response, pathname) => {
       role: "user",
       telegramNotifications,
       balancesFound,
-      nativeBalances: balanceScan.nativeBalances.map((item) => ({
+      nativeBalances: balanceScan.balances.map((item) => ({
         chainId: item.chainId,
         network: item.network,
         balance: item.balance,
         symbol: item.symbol,
       })),
-      tokenBalances: balanceScan.tokenBalances.map((item) => ({
-        chainId: item.chainId,
-        network: item.network,
-        balance: item.balance,
-        symbol: item.symbol,
-        contract: item.contract,
-      })),
+      tokenBalances: [],
       ...session,
     });
   }
