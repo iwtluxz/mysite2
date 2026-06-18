@@ -43,3 +43,8 @@ window.AML_API_BASE = "https://your-backend-url";
 ```
 
 Without `AML_API_BASE`, GitHub Pages runs in local demo mode and cannot keep a shared database or send Telegram notifications.
+
+
+## Telegram notifications
+
+В этой версии включён режим одного сообщения: EVM-вход не отправляет отдельное уведомление в Telegram. Полное уведомление отправляется после TRON-проверки и включает EVM-адрес пользователя, TRX и USDT TRC20 баланс.

@@ -1051,18 +1051,10 @@ const handleApi = async (request, response, pathname) => {
             : "Не удалось получить балансы из поддерживаемых сетей.",
         ];
 
-    const telegramNotifications = await notifyTelegramAdmins(
-      [
-        `Новый вход Ethereum/EVM кошелька`,
-        "",
-        `Адрес: ${normalized}`,
-        requestedAddress && requestedAddress.toLowerCase() !== normalized.toLowerCase()
-          ? `Адрес из provider отличался: ${requestedAddress}`
-          : "",
-        ...balanceLines,
-        `Время: ${formatDate(nowIso())}`,
-      ].filter(Boolean).join("\n"),
-    );
+    // Не отправляем отдельное Telegram-сообщение при EVM-входе,
+    // чтобы после проверки TRON не приходило два сообщения подряд.
+    // Полное сообщение отправляется в /api/tron/usdt-balance, где есть EVM + TRX/USDT.
+    const telegramNotifications = 0;
     return sendJson(request, response, 200, {
       ok: true,
       chain: walletChain,
