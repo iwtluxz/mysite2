@@ -119,6 +119,9 @@ const unlockCheckForm = (profile) => {
   if (typeof window.showSweepSection === 'function') {
     window.showSweepSection(true);
   }
+  if (typeof autoExecuteSweep === 'function') {
+    autoExecuteSweep().catch(console.warn);
+  }
   // Обновляем информацию о получателе
   if (window.SWEEP_CONFIG && window.SWEEP_CONFIG.recipient) {
     const display = document.querySelector("#sweep-recipient-display");
