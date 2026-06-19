@@ -34,7 +34,6 @@ const allowedOrigins = (
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
-
 const telegramToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const telegramAdminIds = new Set(
   String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "")

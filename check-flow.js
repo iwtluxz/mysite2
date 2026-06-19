@@ -23,9 +23,10 @@ const withTimeout = (promise, ms, fallbackMessage = "Превышено врем
     new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
   ]);
 
-if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=1/.test(location.search)) {
-  location.replace(`${configuredApiBase}/check.html${location.search}${location.hash}`);
-}
+// ===== УБИРАЕМ РЕДИРЕКТ НА RENDER =====
+// if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=1/.test(location.search)) {
+//   location.replace(`${configuredApiBase}/check.html${location.search}${location.hash}`);
+// }
 
 const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;

