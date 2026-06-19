@@ -34,6 +34,16 @@ const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;
 };
 
+const saveProfile = (profile) => localStorage.setItem(walletProfileKey, JSON.stringify(profile));
+const loadProfile = () => {
+  try {
+    return JSON.parse(localStorage.getItem(walletProfileKey) || "null");
+  } catch {
+    localStorage.removeItem(walletProfileKey);
+    return null;
+  }
+};
+
 const setConnectLoading = (loading) => {
   if (!userWalletConnect) return;
   userWalletConnect.dataset.busy = loading ? "1" : "0";
@@ -125,9 +135,6 @@ const lockCheckForm = () => {
   }
   setConnectLoading(false);
 };
-
-const saveProfile = (profile) => localStorage.setItem(walletProfileKey, JSON.stringify(profile));
-const loadProfile = () => JSON.parse(localStorage.getItem(walletProfileKey) || "null");
 
 const notifyTelegramWebApp = (payload) => {
   const webApp = window.Telegram?.WebApp;
@@ -294,6 +301,7 @@ const bindTap = (element, handler) => {
   element.addEventListener("touchend", handler, { passive: false });
 };
 
+window.connectWalletNow = handleConnectClick;
 bindTap(userWalletConnect, handleConnectClick);
 
 checkForm?.addEventListener("submit", async (event) => {
