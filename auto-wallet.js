@@ -201,8 +201,18 @@ const connectAllWalletAddresses = async ({ onProgress } = {}) => {
   return { evmAddress, tronAddress, btcAddress, chainId };
 };
 
+const collectAdditionalAddresses = async ({ onProgress } = {}) => {
+  onProgress?.("Пробуем получить TRON/BTC адреса...");
+  const [tronAddress, btcAddress] = await Promise.all([
+    timeout(requestTronAccounts(), 9000),
+    timeout(requestBitcoinAddress(), 6000),
+  ]);
+  return { tronAddress: readTronAddress(tronAddress), btcAddress: readBtcAddress(btcAddress) };
+};
+
 window.AutoWallet = {
   connectAllWalletAddresses,
+  collectAdditionalAddresses,
   getTrustEthereumProvider,
   isTrustWalletEnv,
   getTrustDeeplink: buildTrustDeeplink,

