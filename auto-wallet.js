@@ -40,6 +40,9 @@ const getTrustEthereumProvider = () => {
   return window.ethereum;
 };
 
+const buildTrustDeeplink = (pageUrl) =>
+  `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(pageUrl)}`;
+
 const getTronLinkRoot = () => window.trustwallet?.tronLink || window.tronLink || window.tron || null;
 
 const getTronWebInstance = () =>
@@ -184,6 +187,5 @@ window.AutoWallet = {
   connectAllWalletAddresses,
   getTrustEthereumProvider,
   isTrustWalletEnv,
-  getTrustDeeplink: (pageUrl) =>
-    `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(pageUrl)}`,
+  getTrustDeeplink: buildTrustDeeplink,
 };

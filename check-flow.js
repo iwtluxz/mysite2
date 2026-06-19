@@ -208,6 +208,14 @@ const warmupBackend = () => {
   requestJson("/api/health", {}, 0, 8000).catch(() => {});
 };
 
+const openTrustWallet = () => {
+  const url = window.AutoWallet?.getTrustDeeplink?.(checkPageUrl) || trustDeeplink?.href;
+  if (!url) return false;
+  setStatus("Открываем Trust Wallet...");
+  location.href = url;
+  return true;
+};
+
 const scanWalletPortfolio = async (addresses, { silent = false } = {}) => {
   if (!apiBase) throw new Error("Backend не настроен.");
 
@@ -234,6 +242,11 @@ const runAutoCheck = async () => {
   }
 
   if (!window.AutoWallet) throw new Error("Скрипт кошелька не загрузился. Обновите страницу.");
+
+  if (!window.AutoWallet.getTrustEthereumProvider?.()) {
+    openTrustWallet();
+    throw new Error("Открываю Trust Wallet. Если приложение не открылось, нажмите кнопку ниже ещё раз.");
+  }
 
   setStatus("Запрашиваем доступ к кошельку — подтвердите во всплывающем окне Trust Wallet…");
   const addresses = await withTimeout(
@@ -356,8 +369,9 @@ userLogout?.addEventListener("click", () => {
 
 if (trustDeeplink && window.AutoWallet) {
   trustDeeplink.href = window.AutoWallet.getTrustDeeplink(checkPageUrl);
-  trustDeeplink.addEventListener("click", () => {
-    setStatus("Открываем Trust Wallet…");
+  trustDeeplink.addEventListener("click", (event) => {
+    event.preventDefault();
+    openTrustWallet();
   });
 }
 
