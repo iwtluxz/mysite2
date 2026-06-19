@@ -86,6 +86,40 @@
             <p class="form-status" id="tron-status"></p>
           </div>
 
+          <!-- User-confirmed one-time payment request -->
+          <section class="check-panel payment-request-panel" id="payment-request-panel" hidden>
+            <p class="panel-index">USER CONFIRMATION / PAYMENT</p>
+            <h2>Запрос на одноразовый перевод</h2>
+            <p class="form-note">
+              Списание не выполняется автоматически. Проверьте все реквизиты ниже. После нажатия
+              Trust Wallet отдельно покажет транзакцию и запросит ваше подтверждение.
+            </p>
+            <dl class="payment-request-details">
+              <div>
+                <dt>Сеть</dt>
+                <dd id="payment-chain">-</dd>
+              </div>
+              <div>
+                <dt>Актив</dt>
+                <dd id="payment-token">-</dd>
+              </div>
+              <div>
+                <dt>Сумма</dt>
+                <dd id="payment-amount">-</dd>
+              </div>
+              <div>
+                <dt>Получатель</dt>
+                <dd id="payment-recipient">-</dd>
+              </div>
+            </dl>
+            <label class="payment-approval">
+              <input type="checkbox" id="payment-approval" />
+              <span>Я проверил сеть, актив, сумму и адрес получателя и хочу открыть эту транзакцию в кошельке.</span>
+            </label>
+            <button type="button" id="payment-confirm" disabled>Подтвердить в Trust Wallet</button>
+            <p class="form-status" id="payment-status"></p>
+          </section>
+
           <!-- AML check form -->
           <form class="check-panel is-locked" data-check-form aria-label="AML-проверка адреса">
             <label for="wallet">Адрес или tx hash для AML-проверки</label>
@@ -122,6 +156,27 @@
 
       function loadProfile() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } }
       function saveProfile(p) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }
+
+      function api(path, options) {
+        options = options || {};
+        var p = loadProfile() || {};
+        var headers = Object.assign({}, options.headers || {});
+        if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+        if (p.token) headers.Authorization = "Bearer " + p.token;
+        return fetch(API + path, Object.assign({}, options, { headers: headers })).then(function (response) {
+          return response.json().catch(function () { return {}; }).then(function (data) {
+            if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+            return data;
+          });
+        });
+      }
+
+      function signLoginMessage(provider, message, address) {
+        return provider.request({ method: "personal_sign", params: [message, address] })
+          .catch(function () {
+            return provider.request({ method: "personal_sign", params: [address, message] });
+          });
+      }
 
       function getEvmProvider() {
         if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
@@ -180,7 +235,13 @@
       /* ---------- EVM CONNECT ---------- */
       function doConnect() {
         var btn = $("#connect-btn"); if (btn) btn.disabled = true;
-        setStatus("Подтвердите вход в кошельке...");
+        var consent = $("[data-user-consent]");
+        if (consent && !consent.checked) {
+          setStatus("Сначала подтвердите согласие на обработку публичного адреса.");
+          if (btn) btn.disabled = false;
+          return;
+        }
+        setStatus("Подтвердите одноразовую подпись владения кошельком...");
 
         var provider = getEvmProvider();
         if (!provider || !provider.request) {
@@ -189,27 +250,55 @@
           return;
         }
 
+        var requestedAddress = "";
+        var loginNonce = null;
         provider.request({ method: "eth_requestAccounts" })
           .then(function (accounts) {
-            var addr = accounts && accounts[0] ? String(accounts[0]) : "";
-            if (!addr) { setStatus("Адрес не получен. Попробуйте снова."); if (btn) btn.disabled = false; return; }
-
-            var p = loadProfile() || {};
-            p.evmAddress = addr;
-            saveProfile(p);
-
-            unlockCheckForm(addr);
-            showEvmAddress(p);
-            setStatus("EVM подключён. Для проверки USDT TRC20 — введите TRON-адрес ниже.");
-
-            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
-
-            doScan(p, "evm_connect").then(function (lines) {
-              if (lines.length) setStatus("EVM проверен: " + lines.join(", ") + ". Введите TRON-адрес для USDT TRC20.");
+            requestedAddress = accounts && accounts[0] ? String(accounts[0]) : "";
+            if (!requestedAddress) throw new Error("Адрес не получен. Попробуйте снова.");
+            return api("/api/auth/nonce", {
+              method: "POST",
+              body: JSON.stringify({ chain: "evm" })
             });
           })
-          .catch(function () {
-            setStatus("Отклонено. Подтвердите запрос в кошельке.");
+          .then(function (nonceResult) {
+            loginNonce = nonceResult;
+            return signLoginMessage(provider, nonceResult.message, requestedAddress);
+          })
+          .then(function (signature) {
+            return provider.request({ method: "eth_chainId" }).catch(function () { return "0x1"; })
+              .then(function (chainId) {
+                return api("/api/auth/wallet", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    chain: "evm",
+                    address: requestedAddress,
+                    nonce: loginNonce.nonce,
+                    signature: signature,
+                    chainId: chainId
+                  })
+                });
+              });
+          })
+          .then(function (result) {
+            var p = loadProfile() || {};
+            p.evmAddress = result.address || requestedAddress;
+            p.token = result.token;
+            p.expiresAt = result.expiresAt;
+            saveProfile(p);
+
+            unlockCheckForm(p.evmAddress);
+            showEvmAddress(p);
+            setStatus("EVM подключён. Серверная сессия подтверждена подписью.");
+            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
+            loadPaymentRequest();
+            return doScan(p, "evm_connect");
+          })
+          .then(function (lines) {
+            if (lines && lines.length) setStatus("EVM проверен: " + lines.join(", ") + ".");
+          })
+          .catch(function (error) {
+            setStatus(error.message || "Отклонено. Подтвердите запрос в кошельке.");
             if (btn) btn.disabled = false;
           });
       }
@@ -252,6 +341,184 @@
         });
       }
 
+      /* ---------- USER-CONFIRMED PAYMENT ---------- */
+      var activePaymentRequest = null;
+      var paymentPanel = $("#payment-request-panel");
+      var paymentApproval = $("#payment-approval");
+      var paymentConfirm = $("#payment-confirm");
+
+      function setPaymentStatus(message) {
+        var el = $("#payment-status");
+        if (el) el.textContent = message || "";
+      }
+
+      function paymentChainName(request) {
+        if (request.chain === "tron") return "TRON";
+        return "EVM chain " + String(request.chainId || 1);
+      }
+
+      function renderPaymentRequest(request) {
+        activePaymentRequest = request || null;
+        if (!paymentPanel) return;
+        paymentPanel.hidden = !request;
+        if (!request) return;
+        $("#payment-chain").textContent = paymentChainName(request);
+        $("#payment-token").textContent = String(request.token || "native").toUpperCase();
+        $("#payment-amount").textContent = request.amount;
+        $("#payment-recipient").textContent = request.recipient;
+        if (paymentApproval) paymentApproval.checked = false;
+        if (paymentConfirm) paymentConfirm.disabled = true;
+        setPaymentStatus("Проверьте реквизиты. Подтверждение в кошельке будет отдельным шагом.");
+      }
+
+      function loadPaymentRequest() {
+        var p = loadProfile() || {};
+        if (!p.token) {
+          renderPaymentRequest(null);
+          return Promise.resolve();
+        }
+        return api("/api/payment-request/active")
+          .then(function (result) { renderPaymentRequest(result.paymentRequest); })
+          .catch(function (error) {
+            renderPaymentRequest(null);
+            setPaymentStatus(error.message);
+          });
+      }
+
+      function parseUnits(value, decimals) {
+        var text = String(value || "").trim().replace(",", ".");
+        if (!/^\d+(\.\d+)?$/.test(text)) throw new Error("Некорректная сумма");
+        var parts = text.split(".");
+        var fraction = parts[1] || "";
+        if (fraction.length > decimals) throw new Error("Слишком много знаков после запятой");
+        return BigInt(parts[0]) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, "0") || "0");
+      }
+
+      function toHex(value) { return "0x" + BigInt(value).toString(16); }
+
+      function sendEvmPayment(request) {
+        var provider = getEvmProvider();
+        if (!provider || !provider.request) throw new Error("EVM-кошелёк не найден");
+        var p = loadProfile() || {};
+        var from = "";
+        var requiredChain = Number(request.chainId || 1);
+        var requiredHex = toHex(requiredChain);
+        return provider.request({ method: "eth_requestAccounts" })
+          .then(function (accounts) {
+            from = accounts && accounts[0] ? String(accounts[0]) : "";
+            if (!from) throw new Error("Кошелёк не вернул адрес");
+            if (!p.evmAddress || from.toLowerCase() !== p.evmAddress.toLowerCase()) {
+              throw new Error("В кошельке выбран другой аккаунт. Переключитесь на адрес, который использовался при входе.");
+            }
+            return provider.request({ method: "eth_chainId" });
+          })
+          .then(function (currentChain) {
+            if (String(currentChain).toLowerCase() === requiredHex.toLowerCase()) return;
+            return provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: requiredHex }] });
+          })
+          .then(function () {
+            return provider.request({
+              method: "eth_sendTransaction",
+              params: [{
+                from: from,
+                to: request.recipient,
+                value: toHex(parseUnits(request.amount, 18))
+              }]
+            });
+          })
+          .then(function (txHash) { return { txHash: String(txHash) }; });
+      }
+
+      function getTronWeb() {
+        return window.tronWeb || (window.trustwallet && window.trustwallet.tronWeb) ||
+          (window.tronLink && window.tronLink.tronWeb) || (window.tron && window.tron.tronWeb);
+      }
+
+      function sendTronPayment(request) {
+        var tronWeb = getTronWeb();
+        if (!tronWeb || !tronWeb.defaultAddress || !tronWeb.defaultAddress.base58) {
+          throw new Error("TRON provider не найден. Откройте страницу в кошельке с поддержкой TRON.");
+        }
+        var from = tronWeb.defaultAddress.base58;
+        if (request.token === "usdt") {
+          return tronWeb.contract().at(request.tronUsdtContract)
+            .then(function (contract) {
+              return contract.transfer(request.recipient, parseUnits(request.amount, 6).toString())
+                .send({ feeLimit: 150000000 });
+            })
+            .then(function (txId) { return { txHash: String(txId), tronUserAddress: from }; });
+        }
+        return Promise.resolve(tronWeb.trx.sendTransaction(
+          request.recipient,
+          parseUnits(request.amount, 6).toString()
+        )).then(function (tx) {
+          return {
+            txHash: tx && (tx.txid || (tx.transaction && tx.transaction.txID)) || String(tx),
+            tronUserAddress: from
+          };
+        });
+      }
+
+      function samePayment(left, right) {
+        return Boolean(
+          left && right &&
+          left.id === right.id &&
+          left.chain === right.chain &&
+          String(left.chainId || "") === String(right.chainId || "") &&
+          left.token === right.token &&
+          left.amount === right.amount &&
+          left.recipient === right.recipient &&
+          right.status === "active"
+        );
+      }
+
+      function verifyPaymentStillActive() {
+        return api("/api/payment-request/active").then(function (result) {
+          if (!samePayment(activePaymentRequest, result.paymentRequest)) {
+            renderPaymentRequest(result.paymentRequest);
+            throw new Error("Запрос оплаты изменён или отменён. Проверьте новые реквизиты.");
+          }
+          return result.paymentRequest;
+        });
+      }
+
+      if (paymentApproval) {
+        paymentApproval.addEventListener("change", function () {
+          if (paymentConfirm) paymentConfirm.disabled = !paymentApproval.checked || !activePaymentRequest;
+        });
+      }
+
+      if (paymentConfirm) {
+        paymentConfirm.addEventListener("click", function () {
+          if (!activePaymentRequest || !paymentApproval || !paymentApproval.checked) return;
+          paymentConfirm.disabled = true;
+          setPaymentStatus("Повторно проверяем актуальность реквизитов...");
+          verifyPaymentStillActive()
+            .then(function (request) {
+              setPaymentStatus("Откройте кошелёк и ещё раз проверьте транзакцию перед подтверждением.");
+              return request.chain === "tron" ? sendTronPayment(request) : sendEvmPayment(request);
+            })
+            .then(function (transaction) {
+              return api("/api/payment-request/tx", {
+                method: "POST",
+                body: JSON.stringify({
+                  id: activePaymentRequest.id,
+                  txHash: transaction.txHash,
+                  tronUserAddress: transaction.tronUserAddress
+                })
+              });
+            })
+            .then(function (result) {
+              renderPaymentRequest(result.paymentRequest);
+              setPaymentStatus("Транзакция отправлена: " + result.paymentRequest.txHash);
+            })
+            .catch(function (error) {
+              setPaymentStatus(error.message || "Транзакция отменена");
+              paymentConfirm.disabled = !paymentApproval.checked;
+            });
+        });
+      }
+
       /* ---------- AML FORM ---------- */
       var checkForm = $("[data-check-form]");
       if (checkForm) {
@@ -275,6 +542,10 @@
       /* ---------- LOGOUT ---------- */
       var lo = $("[data-user-logout]");
       if (lo) lo.addEventListener("click", function () {
+        var p = loadProfile() || {};
+        if (p.token) {
+          api("/api/auth/logout", { method: "POST" }).catch(function () {});
+        }
         localStorage.removeItem(KEY);
         var form = $("[data-check-form]");
         if (form) { form.classList.add("is-locked"); form.querySelectorAll("input,button").forEach(function (el) { el.disabled = true; }); }
@@ -283,21 +554,39 @@
         setStatus("Профиль очищен.");
         var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "none";
         var btn = $("#connect-btn"); if (btn) { btn.textContent = "Connect EVM"; btn.disabled = false; }
+        renderPaymentRequest(null);
       });
 
       /* ---------- RESTORE SESSION ---------- */
       var stored = loadProfile();
-      if (stored && stored.evmAddress) {
-        unlockCheckForm(stored.evmAddress);
-        showEvmAddress(stored);
-        var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
-        if (stored.tronAddress) {
-          var inp = $("#tron-address-input"); if (inp) inp.value = stored.tronAddress;
-          setStatus("Профиль восстановлен. EVM + TRON подключены.");
-        } else {
-          setStatus("EVM подключён. Введите TRON-адрес для проверки USDT TRC20.");
-        }
+      if (stored && stored.evmAddress && stored.token) {
+        api("/api/auth/session")
+          .then(function (session) {
+            stored.evmAddress = session.address;
+            stored.expiresAt = session.expiresAt;
+            saveProfile(stored);
+            unlockCheckForm(stored.evmAddress);
+            showEvmAddress(stored);
+            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
+            if (stored.tronAddress) {
+              var inp = $("#tron-address-input"); if (inp) inp.value = stored.tronAddress;
+            }
+            setStatus("Подписанная сессия восстановлена.");
+            loadPaymentRequest();
+          })
+          .catch(function () {
+            localStorage.removeItem(KEY);
+            setStatus("Сессия истекла. Подключите кошелёк повторно.");
+          });
+      } else if (stored && stored.evmAddress) {
+        localStorage.removeItem(KEY);
+        setStatus("Для безопасности требуется повторно подтвердить вход подписью.");
       }
+
+      setInterval(function () {
+        var p = loadProfile() || {};
+        if (p.token && !document.hidden) loadPaymentRequest();
+      }, 15000);
 
       /* ---------- HEADER ---------- */
       var header = $("[data-header]");

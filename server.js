@@ -815,12 +815,13 @@ const getCorsHeaders = (request) => {
 };
 
 const sendJson = (request, response, status, payload, headers = {}) => {
+  const body = JSON.stringify(payload, (_, value) => (typeof value === "bigint" ? value.toString() : value));
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     ...getCorsHeaders(request),
     ...headers,
   });
-  response.end(JSON.stringify(payload));
+  response.end(body);
 };
 
 const getBearerToken = (request) => {
@@ -1950,17 +1951,19 @@ const handleApi = async (request, response, pathname) => {
 
   if (request.method === "GET" && pathname === "/api/payment-request/active") {
     const session = getUserSession(request);
-    const paymentRequest = getActivePaymentRequest(session?.address);
+    if (!session) return sendJson(request, response, 401, { error: "Сначала подтвердите вход через кошелёк" });
+    const paymentRequest = getActivePaymentRequest(session.address);
     return sendJson(request, response, 200, { ok: true, paymentRequest });
   }
 
   if (request.method === "POST" && pathname === "/api/payment-request/tx") {
     const body = await readBody(request);
     const session = getUserSession(request);
+    if (!session) return sendJson(request, response, 401, { error: "Сначала подтвердите вход через кошелёк" });
     const completed = completePaymentRequest({
       id: body.id,
       txHash: body.txHash,
-      userWallet: session?.address || null,
+      userWallet: session.address,
       tronUserAddress: body.tronUserAddress,
     });
     const serialized = serializePaymentRequest(completed);
@@ -2070,6 +2073,10 @@ const handleApi = async (request, response, pathname) => {
       if (address && isAddress(address)) requestedAddress = getAddress(address);
     } catch {
       return sendJson(request, response, 401, { error: "Некорректная подпись" });
+    }
+    if (requestedAddress && requestedAddress !== normalized) {
+      nonces.delete(nonceKey);
+      return sendJson(request, response, 401, { error: "Подпись не совпадает с выбранным адресом кошелька" });
     }
 
     nonces.delete(nonceKey);
@@ -2237,7 +2244,11 @@ const server = http.createServer(async (request, response) => {
     }
     await serveStatic(response, url.pathname);
   } catch (error) {
-    sendJson(request, response, 500, { error: error.message || "Внутренняя ошибка сервера" });
+    if (!response.headersSent) {
+      sendJson(request, response, 500, { error: error.message || "Внутренняя ошибка сервера" });
+    } else {
+      response.destroy(error);
+    }
   }
 });
 
