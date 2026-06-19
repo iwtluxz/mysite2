@@ -899,6 +899,24 @@ button:disabled {
   accent-color: var(--neon);
 }
 
+.linked-tron-row {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.linked-tron-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wallet-login [data-tron-linked-address] {
+  grid-column: 1 / -1;
+}
+
 .consent-notice {
   padding: 14px 16px;
   border: 1px solid rgba(255, 255, 255, 0.2);

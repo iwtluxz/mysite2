@@ -8,6 +8,7 @@ const userLogout = document.querySelector("[data-user-logout]");
 const userWalletConnect = document.querySelector("[data-user-wallet-connect]");
 const userWalletStatus = document.querySelector("[data-user-wallet-status]");
 const userWalletAddress = document.querySelector("[data-user-wallet-address]");
+const tronLinkedInput = document.querySelector("[data-tron-linked-address]");
 const userConsent = document.querySelector("[data-user-consent]");
 const trustDeeplink = document.querySelector("[data-trust-deeplink]");
 const checkLockNote = document.querySelector("[data-check-lock-note]");
@@ -23,7 +24,7 @@ const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
 const isStaticGitHubPage = location.hostname.endsWith(".github.io");
 const isOnRenderHost = /\.onrender\.com$/i.test(location.hostname);
-const apiBase = isOnRenderHost ? "" : configuredApiBase;
+const apiBase = isOnRenderHost ? location.origin.replace(/\/$/, "") : configuredApiBase;
 const renderCheckUrl = configuredApiBase ? `${configuredApiBase}/check.html` : `${location.origin}/check.html`;
 const useBackend = Boolean(configuredApiBase) || isOnRenderHost || (isHttpPage && !isStaticGitHubPage);
 const userSessionKey = "aml_user_session";
@@ -64,7 +65,6 @@ const buildFetchOptions = (options = {}, token) => {
 
   return {
     method,
-    mode: "cors",
     credentials: "omit",
     cache: "no-store",
     headers,
@@ -72,25 +72,46 @@ const buildFetchOptions = (options = {}, token) => {
   };
 };
 
-const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 } = {}) => {
+const requestJsonViaXhr = (fullUrl, options = {}, token, timeoutMs = 120000) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(String(options.method || "GET").toUpperCase(), fullUrl, true);
+    xhr.timeout = timeoutMs;
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (options.body) xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data.error || "Ошибка запроса"));
+    };
+    xhr.onerror = () => reject(Object.assign(new Error("network"), { name: "NetworkError" }));
+    xhr.ontimeout = () => reject(Object.assign(new Error("timeout"), { name: "AbortError" }));
+    xhr.send(options.body || null);
+  });
+
+const requestJson = async (url, options = {}, { retries = 4, timeoutMs = 120000 } = {}) => {
   const token = options.token;
   const fullUrl = `${apiBase}${url}`;
   let lastError;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetchWithTimeout(
-        fullUrl,
-        buildFetchOptions(options, token),
-        timeoutMs,
-      );
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Ошибка запроса");
-      return data;
+      try {
+        const response = await fetchWithTimeout(fullUrl, buildFetchOptions(options, token), timeoutMs);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+        return data;
+      } catch (fetchError) {
+        return await requestJsonViaXhr(fullUrl, options, token, timeoutMs);
+      }
     } catch (error) {
       lastError = error;
-      if (attempt < retries) await sleep(2500 * (attempt + 1));
+      if (attempt < retries) await sleep(3000 * (attempt + 1));
     }
   }
 
@@ -99,13 +120,8 @@ const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 }
   }
 
   const reason = lastError?.name === "AbortError" ? "превышено время ожидания" : "сеть недоступна";
-  const renderHint =
-    isStaticGitHubPage && configuredApiBase
-      ? ` Для Trust Wallet откройте ${renderCheckUrl} — там API на том же домене.`
-      : " На бесплатном Render сервер может просыпаться до 60 секунд — подождите и нажмите Connect ещё раз.";
-
   throw new Error(
-    `Backend недоступен (${configuredApiBase || location.origin}, ${reason}).${renderHint}`,
+    `Backend недоступен (${configuredApiBase || location.origin}, ${reason}). Откройте ${renderCheckUrl} в Trust Wallet и подождите до 2 минут, пока Render проснётся.`,
   );
 };
 
@@ -384,7 +400,11 @@ const formatBalancesText = (result) => {
   }
 
   if (result.portfolio?.trx?.ok) {
-    lines.push(`TRON native: ${result.portfolio.trx.balance} TRX`);
+    lines.push(`TRX: ${result.portfolio.trx.balance} TRX`);
+  } else if (result.tronAddress) {
+    lines.push("TRX: адрес есть, баланс не получен");
+  } else {
+    lines.push("TRX: TRON-адрес не передан");
   }
   if (result.portfolio?.btc?.ok) {
     lines.push(`Bitcoin: ${result.portfolio.btc.balance} BTC`);
@@ -420,10 +440,7 @@ const getBitcoinAddressFromProvider = async () => {
 };
 
 const detectLinkedWalletAddresses = async () => {
-  const [tronAddress, btcAddress] = await Promise.all([
-    getTronAddressFromProvider(),
-    getBitcoinAddressFromProvider(),
-  ]);
+  const [tronAddress, btcAddress] = await Promise.all([getLinkedTronAddress(), getBitcoinAddressFromProvider()]);
   return { tronAddress, btcAddress };
 };
 
@@ -625,6 +642,11 @@ const confirmActivePayment = async () => {
 };
 
 const getTronAddressFromProvider = async () => {
+  const readAddress = (value) => {
+    const address = String(value || "").trim();
+    return address.startsWith("T") ? address : "";
+  };
+
   const providers = [
     window.tronWeb,
     window.trustwallet?.tronWeb,
@@ -633,20 +655,55 @@ const getTronAddressFromProvider = async () => {
   ].filter(Boolean);
 
   for (const tronWebLike of providers) {
-    const address = tronWebLike.defaultAddress?.base58 || tronWebLike.defaultAddress?.hex;
-    if (address && String(address).startsWith("T")) return address;
+    const address = readAddress(tronWebLike.defaultAddress?.base58 || tronWebLike.defaultAddress?.hex);
+    if (address) return address;
   }
 
-  const requestProviders = [window.tron, window.tronLink, window.trustwallet?.tron].filter(Boolean);
+  const requestProviders = [
+    window.trustwallet,
+    window.trustwallet?.tron,
+    window.tron,
+    window.tronLink,
+  ].filter(Boolean);
+
   for (const provider of requestProviders) {
-    for (const method of ["tron_requestAccounts", "eth_requestAccounts"]) {
+    for (const method of ["tron_requestAccounts", "requestAccounts", "eth_requestAccounts"]) {
       try {
         const accounts = await provider.request?.({ method });
-        const address = accounts?.[0] || provider.tronWeb?.defaultAddress?.base58;
-        if (address && String(address).startsWith("T")) return address;
+        const address = readAddress(Array.isArray(accounts) ? accounts[0] : accounts?.address || accounts?.[0]);
+        if (address) return address;
       } catch {
         // Пробуем следующий метод/провайдер.
       }
+    }
+  }
+
+  if (typeof window.tronWeb?.ready === "function") {
+    try {
+      await new Promise((resolve) => {
+        window.tronWeb.ready(() => resolve());
+        setTimeout(resolve, 1500);
+      });
+      const address = readAddress(window.tronWeb?.defaultAddress?.base58);
+      if (address) return address;
+    } catch {
+      // TronWeb ещё не готов.
+    }
+  }
+
+  return "";
+};
+
+const getLinkedTronAddress = async () => {
+  const manual = tronLinkedInput?.value?.trim();
+  if (manual?.startsWith("T")) return manual;
+
+  for (const delay of [0, 700, 1800]) {
+    if (delay) await sleep(delay);
+    const detected = await getTronAddressFromProvider();
+    if (detected) {
+      if (tronLinkedInput) tronLinkedInput.value = detected;
+      return detected;
     }
   }
 
@@ -743,10 +800,14 @@ userWalletConnect?.addEventListener("click", async () => {
       expiresAt: result.expiresAt,
     });
     unlockCheckForm(result.address, {
-      statusMessage: `Готово. Профиль сохранён для следующих проверок. ${formatBalancesText(result)}`,
+      statusMessage: `Готово. ${formatBalancesText(result)}`,
       tronAddress: result.tronAddress,
       btcAddress: result.btcAddress,
     });
+    if (!result.tronAddress && userWalletStatus) {
+      userWalletStatus.textContent +=
+        " TRON-адрес не найден автоматически — вставьте T... в поле выше и нажмите «Переподключить кошелёк».";
+    }
   } catch (error) {
     userWalletStatus.textContent = error.message;
   } finally {

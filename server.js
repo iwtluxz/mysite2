@@ -531,6 +531,8 @@ const formatPortfolioTelegramLines = (portfolio) => {
           : `ошибка (${portfolio.usdtTrc20?.error || "нет данных"})`
       }`,
     );
+  } else if (portfolio.evmAddress) {
+    lines.push("", "TRON: адрес не передан Trust Wallet — TRX/USDT TRC20 не проверены");
   }
 
   if (portfolio.btcAddress) {

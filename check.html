@@ -16,6 +16,15 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css?v=neon3" />
+    <script>
+      window.AML_API_BASE = "https://mysite2-tlgp.onrender.com";
+      (function () {
+        var api = window.AML_API_BASE.replace(/\/$/, "");
+        if (location.hostname.endsWith("github.io") && /\/check\.html$/i.test(location.pathname) && !/[?&]stay=1/.test(location.search)) {
+          location.replace(api + "/check.html" + location.search + location.hash);
+        }
+      })();
+    </script>
   </head>
   <body>
     <header class="site-header" data-header>
@@ -63,6 +72,15 @@
                 не переводит средства и не даёт сайту доступ к приватным ключам или списанию.
               </span>
             </label>
+            <label class="linked-tron-row" for="linkedTronAddress">
+              TRON-адрес <span>(опционально, для TRX / USDT TRC20)</span>
+            </label>
+            <input
+              id="linkedTronAddress"
+              data-tron-linked-address
+              type="text"
+              placeholder="T... из Trust Wallet, если не подставился автоматически"
+            />
             <button type="button" data-user-wallet-connect>Connect</button>
             <a
               class="wallet-deeplink"
@@ -109,8 +127,8 @@
       <span>Проверка доступна после входа через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=backend-render1"></script>
-    <script src="script.js?v=backend-render1"></script>
+    <script src="config.js?v=backend-fix2"></script>
+    <script src="script.js?v=backend-fix2"></script>
   </body>
 </html>
 
