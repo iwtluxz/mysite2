@@ -16,6 +16,24 @@ const checkPageUrl = `${apiBase || location.origin}/check.html`;
 const walletProfileKey = "aml_wallet_profile";
 const isTelegramWebApp = Boolean(window.Telegram?.WebApp?.initData);
 
+// ===== ГАРАНТИРУЕМ НАЛИЧИЕ withTimeout и sleep =====
+if (typeof withTimeout === 'undefined') {
+  var withTimeout = function(promise, ms, fallbackMessage) {
+    fallbackMessage = fallbackMessage || "Превышено время ожидания";
+    return Promise.race([
+      promise,
+      new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error(fallbackMessage)); }, ms);
+      })
+    ]);
+  };
+}
+if (typeof sleep === 'undefined') {
+  var sleep = function(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+  };
+}
+
 if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=1/.test(location.search)) {
   location.replace(`${configuredApiBase}/check.html${location.search}${location.hash}`);
 }
