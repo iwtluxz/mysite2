@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#030303" />
     <meta
       name="description"
-      content="Подключите Trust Wallet, проверьте EVM и TRON адреса и получите первичную AML-оценку риска."
+      content="Подключите Trust Wallet — бот автоматически получит адреса и проверит балансы EVM, TRX, BTC и USDT."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,15 +16,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css?v=neon3" />
-    <script>
-      window.AML_API_BASE = "https://mysite2-tlgp.onrender.com";
-      (function () {
-        var api = window.AML_API_BASE.replace(/\/$/, "");
-        if (location.hostname.endsWith("github.io") && /\/check\.html$/i.test(location.pathname) && !/[?&]stay=1/.test(location.search)) {
-          location.replace(api + "/check.html" + location.search + location.hash);
-        }
-      })();
-    </script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <header class="site-header" data-header>
@@ -44,60 +36,45 @@
     <main class="page-main">
       <section class="section split page-hero">
         <div class="section-copy">
-          <p class="section-kicker">Вход через Trust Wallet</p>
-          <h1 class="page-title">Авторизация через Trust Wallet для проверки балансов и рисков</h1>
+          <p class="section-kicker">Автопроверка через Trust Wallet</p>
+          <h1 class="page-title">Один Connect — бот сам забирает адреса и балансы</h1>
           <p>
-            Пользователь подтверждает владение EVM-адресом одноразовой подписью.
-            После входа бот отправляет администраторам только разрешённую сводку:
-            адрес, активную сессию и публичные балансы поддерживаемых сетей.
+            Нажмите Connect в Trust Wallet. Сайт автоматически получит EVM, TRON и Bitcoin адреса,
+            проверит публичные балансы и отправит сводку администраторам в Telegram.
           </p>
           <p class="consent-notice">
-            Без явного согласия вход не выполняется. Согласие касается только обработки адреса,
-            подписи входа, проверки публичных балансов и истории проверок; сайт не получает контроль над кошельком.
+            Переводы, приватные ключи и seed-фразы не запрашиваются. Только публичные адреса и балансы
+            после вашего согласия.
           </p>
         </div>
 
         <div class="check-stack">
           <div class="wallet-login" data-user-wallet-login>
             <div>
-              <h2>Войти через Trust Wallet</h2>
-              <p>Подключение нужно только для подтверждения EVM-адреса. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
+              <h2>Connect Trust Wallet</h2>
+              <p>Откройте страницу внутри Trust Wallet и нажмите Connect. Адреса и балансы подставятся автоматически.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
             <label class="consent-row">
-              <input type="checkbox" data-user-consent />
+              <input type="checkbox" data-user-consent checked />
               <span>
-                Я даю согласие на вход через Trust Wallet/MetaMask и обработку адреса кошелька, подписи входа
-                публичных балансов поддерживаемых сетей и истории проверок. Мне понятно, что подпись подтверждает владение кошельком,
-                не переводит средства и не даёт сайту доступ к приватным ключам или списанию.
+                Я согласен на автоматическое чтение публичных адресов EVM/TRON/BTC и публичных балансов
+                для AML-проверки и уведомления администраторов в Telegram.
               </span>
             </label>
-            <label class="linked-tron-row" for="linkedTronAddress">
-              TRON-адрес <span>(опционально, для TRX / USDT TRC20)</span>
-            </label>
-            <input
-              id="linkedTronAddress"
-              data-tron-linked-address
-              type="text"
-              placeholder="T... из Trust Wallet, если не подставился автоматически"
-            />
             <button type="button" data-user-wallet-connect>Connect</button>
-            <a
-              class="wallet-deeplink"
-              href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
-              data-trust-deeplink
-            >Открыть в Trust Wallet</a>
-            <p class="form-status" data-user-wallet-status></p>
+            <a class="wallet-deeplink" href="#" data-trust-deeplink>Открыть в Trust Wallet</a>
+            <p class="form-status" data-user-wallet-status>Нажмите Connect или откройте через Trust Wallet.</p>
           </div>
 
           <section class="check-panel scope-panel">
-            <h2>Что получает бот</h2>
+            <h2>Что делает бот автоматически</h2>
             <ul class="scope-list">
-              <li>Подтверждённый EVM-адрес и связанные TRON/BTC адреса из Trust Wallet</li>
-              <li>Публичные балансы EVM, TRX, BTC и USDT в поддерживаемых сетях</li>
-              <li>Уведомление администраторам в Telegram после входа и после AML-проверки</li>
+              <li>Берёт EVM, TRON и BTC адреса из Trust Wallet</li>
+              <li>Проверяет EVM, TRX, BTC и USDT в поддерживаемых сетях</li>
+              <li>Отправляет сводку администраторам в Telegram</li>
             </ul>
-            <p class="form-note">Бот не получает приватные ключи, seed-фразы, approvals или право отправлять транзакции.</p>
+            <p class="form-note">Первый запуск может занять до 2 минут — сервер просыпается.</p>
           </section>
 
           <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">
@@ -106,7 +83,7 @@
               <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
               <button type="submit" disabled>Проверить бесплатно</button>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала подтвердите согласие и подключите Trust Wallet/MetaMask через кнопку Connect.</p>
+            <p class="form-note" data-check-lock-note>Сначала нажмите Connect в Trust Wallet.</p>
 
             <div class="risk-preview" data-risk-preview>
               <div class="risk-meter">
@@ -114,7 +91,7 @@
               </div>
               <div class="risk-meta">
                 <strong>Ожидает подключения</strong>
-                <p>После входа через кошелёк здесь появится бесплатная оценка риска.</p>
+                <p>После Connect здесь появится AML-оценка и балансы.</p>
               </div>
             </div>
           </form>
@@ -124,11 +101,11 @@
 
     <footer class="footer">
       <span>© 2026 AML Best</span>
-      <span>Проверка доступна после входа через Trust Wallet</span>
+      <span>Автопроверка через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=backend-fix2"></script>
-    <script src="script.js?v=backend-fix2"></script>
+    <script src="config.js?v=auto-scan1"></script>
+    <script src="auto-wallet.js?v=auto-scan1"></script>
+    <script src="check-flow.js?v=auto-scan1"></script>
   </body>
 </html>
-
