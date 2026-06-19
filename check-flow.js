@@ -26,6 +26,8 @@ const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;
 };
 
+window.setStatus = setStatus;
+
 const saveProfile = (profile) => localStorage.setItem(walletProfileKey, JSON.stringify(profile));
 const loadProfile = () => {
   try {
