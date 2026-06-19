@@ -37,25 +37,55 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-const requestJson = async (url, options = {}) => {
-  const token = options.token;
-  let response;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    response = await fetch(`${apiBase}${url}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {}),
-      },
-      ...options,
-    });
-  } catch {
-    throw new Error("Backend недоступен. Проверьте адрес API и запуск сервера.");
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 } = {}) => {
+  const token = options.token;
+  const fullUrl = `${apiBase}${url}`;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        fullUrl,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(options.headers || {}),
+          },
+          ...options,
+        },
+        timeoutMs,
+      );
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Ошибка запроса");
+      return data;
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) await sleep(2500 * (attempt + 1));
+    }
   }
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Ошибка запроса");
-  return data;
+  if (!apiBase) {
+    throw new Error("Backend не подключён. Укажите AML_API_BASE в config.js и разверните server.js.");
+  }
+
+  const reason = lastError?.name === "AbortError" ? "превышено время ожидания" : "сеть недоступна";
+  throw new Error(
+    `Backend недоступен (${apiBase}, ${reason}). На бесплатном Render сервер может просыпаться до 60 секунд — подождите и нажмите Connect ещё раз.`,
+  );
 };
 
 const updateHeader = () => {
@@ -470,10 +500,30 @@ const connectUserWallet = async () => {
     throw new Error("Backend не подключён. Укажите AML_API_BASE в config.js и разверните server.js.");
   }
 
-  const health = await requestJson("/api/health");
+  if (userWalletStatus) {
+    userWalletStatus.textContent = "Подключаемся к серверу... На бесплатном Render это может занять до минуты.";
+  }
+
+  const health = await requestJson("/api/health", {}, { retries: 3, timeoutMs: 90000 });
   if (!health.ok) throw new Error("Backend не готов к авторизации.");
 
   return connectEvmWallet();
+};
+
+const warmUpBackend = async () => {
+  if (!useBackend || !checkForm) return;
+  if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
+    userWalletStatus.textContent = "Проверяем backend...";
+  }
+
+  try {
+    await requestJson("/api/health", {}, { retries: 3, timeoutMs: 90000 });
+    if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
+      userWalletStatus.textContent = "";
+    }
+  } catch (error) {
+    if (userWalletStatus) userWalletStatus.textContent = error.message;
+  }
 };
 
 const sendEvmPayment = async (paymentRequest) => {
@@ -789,5 +839,7 @@ userLogout?.addEventListener("click", async () => {
   lockCheckForm();
 });
 
-loadUserSession();
+warmUpBackend().finally(() => {
+  loadUserSession();
+});
 loadAdmin();
