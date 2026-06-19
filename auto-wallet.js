@@ -101,7 +101,7 @@ const requestViaProvider = async (provider, method) => {
     return readTronAddress(result.address) || readBtcAddress(result.address);
   }
   if (result?.code === 200 || result?.message?.includes?.("already")) {
-    return "";
+    return readPassiveTronAddress();
   }
   return "";
 };
@@ -110,13 +110,17 @@ const requestTronAccounts = async () => {
   const tronWeb = getTronWebInstance();
   const tronLink = getTronLinkRoot();
   const targets = [tronLink, window.trustwallet, window.tron, tronWeb].filter(Boolean);
-  const methods = ["eth_requestAccounts", "tron_requestAccounts", "requestAccounts"];
+  const methods = ["tron_requestAccounts", "eth_requestAccounts", "requestAccounts"];
 
   for (const target of targets) {
     for (const method of methods) {
       try {
         const address = await requestViaProvider(target, method);
         if (address) return address;
+        const passive = readPassiveTronAddress();
+        if (passive) return passive;
+        const delayed = await waitForTronWeb(1500);
+        if (delayed) return delayed;
       } catch {
         // Пробуем следующий метод.
       }

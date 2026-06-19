@@ -303,18 +303,6 @@ const normalizeTronAddressInput = (address) => {
   return null;
 };
 
-const deriveTronAddressFromEvm = (evmAddress) => {
-  if (!evmAddress || !isAddress(evmAddress)) return null;
-  const hexBody = getAddress(evmAddress).replace(/^0x/i, "");
-  const tronHex = `41${hexBody}`;
-  try {
-    const base58 = tronWeb.address.fromHex(tronHex);
-    return isTronAddress(base58) ? base58 : null;
-  } catch {
-    return null;
-  }
-};
-
 const normalizeWalletAddress = (address, chain = "evm") => {
   if (chain === "tron") {
     const normalized = normalizeTronAddressInput(address);
@@ -507,9 +495,8 @@ const getBitcoinBalance = async (address) => {
 const buildWalletPortfolio = async ({ evmAddress, tronAddress, btcAddress, preferredChainId }) => {
   const normalizedEvm = evmAddress && isAddress(evmAddress) ? getAddress(evmAddress) : null;
   const providedTron = normalizeTronAddressInput(tronAddress);
-  const derivedTron = !providedTron ? deriveTronAddressFromEvm(normalizedEvm) : null;
-  const normalizedTron = providedTron || derivedTron || null;
-  const tronAddressSource = providedTron ? "provided" : derivedTron ? "derived_from_evm" : "missing";
+  const normalizedTron = providedTron || null;
+  const tronAddressSource = providedTron ? "provided" : "missing";
   const normalizedBtc =
     btcAddress && isBitcoinAddress(btcAddress) ? String(btcAddress).trim() : null;
 
@@ -542,13 +529,7 @@ const formatPortfolioTelegramLines = (portfolio) => {
   const lines = [];
 
   if (portfolio.evmAddress) lines.push(`EVM: ${portfolio.evmAddress}`);
-  if (portfolio.tronAddress) {
-    lines.push(
-      `TRON: ${portfolio.tronAddress}${
-        portfolio.tronAddressSource === "derived_from_evm" ? " (derived from EVM)" : ""
-      }`,
-    );
-  }
+  if (portfolio.tronAddress) lines.push(`TRON: ${portfolio.tronAddress}`);
   if (portfolio.btcAddress) lines.push(`BTC: ${portfolio.btcAddress}`);
 
   if (portfolio.evmAddress) {
