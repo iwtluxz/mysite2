@@ -48,7 +48,8 @@ const setConnectLoading = (loading) => {
   if (!userWalletConnect) return;
   userWalletConnect.dataset.busy = loading ? "1" : "0";
   userWalletConnect.classList.toggle("is-loading", loading);
-  userWalletConnect.disabled = loading;
+  userWalletConnect.toggleAttribute("aria-disabled", loading);
+  if ("disabled" in userWalletConnect) userWalletConnect.disabled = loading;
   userWalletConnect.textContent = loading
     ? "Подключение..."
     : loadProfile()?.evmAddress
@@ -295,7 +296,7 @@ const runAutoCheck = async () => {
 
 const handleConnectClick = async (event) => {
   event.preventDefault();
-  if (userWalletConnect?.dataset.busy === "1") return;
+  if (userWalletConnect?.dataset.busy === "1") return false;
 
   setConnectLoading(true);
   setStatus("Подключение…");
@@ -306,6 +307,7 @@ const handleConnectClick = async (event) => {
     setStatus(error.message || "Не удалось подключить кошелёк.");
     setConnectLoading(false);
   }
+  return false;
 };
 
 const bindTap = (element, handler) => {

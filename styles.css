@@ -954,7 +954,11 @@ button.is-loading {
 }
 
 .wallet-login button,
+.connect-button,
 .admin-login button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 52px;
   border: 0;
   border-radius: var(--radius);
@@ -968,6 +972,7 @@ button.is-loading {
 }
 
 .wallet-login button:hover,
+.connect-button:hover,
 .admin-login button:hover {
   transform: translateY(-1px);
   box-shadow: 0 0 40px rgba(255, 255, 255, 0.42);
