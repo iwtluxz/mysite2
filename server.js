@@ -581,7 +581,9 @@ const formatPortfolioTelegramLines = (portfolio) => {
 
 const getTronNativeBalance = async (address) => {
   const normalized = String(address || "").trim();
-  const errors = [];
+  if (!normalized.startsWith("T") || normalized.length < 26) {
+    return { ok: false, network: "TRON", token: "TRX", error: "Некорректный TRON адрес (должен начинаться с T)" };
+  }
 
   const makeResult = (source, sun) => ({
     ok: true,
@@ -591,57 +593,61 @@ const getTronNativeBalance = async (address) => {
     balance: formatTokenUnits(BigInt(sun), 6),
     rawBalance: BigInt(sun),
   });
+  const errors = [];
 
-  // Native TRX balance. This is what Trust Wallet shows as the big dollar amount
-  // when the asset row is TRX / Tron.
+  // Method 1: /wallet/getaccount with visible:true (official, most reliable)
   try {
-    const sun = await tronWeb.trx.getBalance(normalized);
-    return makeResult("tronweb-trx-getBalance", sun?.toString?.() ?? sun);
+    const response = await fetch(`${tronFullHost}/wallet/getaccount`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getTronHeaders() },
+      body: JSON.stringify({ address: normalized, visible: true }),
+      signal: withTimeout(),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // Empty object = new/unactivated account = 0 TRX, not an error
+    const sun = payload?.balance ?? 0;
+    return makeResult("trongrid-wallet-getaccount", sun);
   } catch (error) {
-    errors.push(`tronWeb getBalance: ${error.message}`);
+    errors.push(`wallet/getaccount: ${error.message}`);
   }
 
+  // Method 2: v1 accounts endpoint
   try {
     const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
       headers: getTronHeaders(),
       signal: withTimeout(),
     });
     const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const sun = payload?.data?.[0]?.balance ?? 0;
-    return makeResult("trongrid-account-trx", sun);
+    return makeResult("trongrid-v1-accounts", sun);
   } catch (error) {
-    errors.push(`TronGrid account TRX: ${error.message}`);
+    errors.push(`v1/accounts TRX: ${error.message}`);
   }
 
+  // Method 3: TronScan fallback
   try {
-    const response = await fetch(`https://apilist.tronscanapi.com/api/account?address=${encodeURIComponent(normalized)}`, {
-      headers: { Accept: "application/json" },
-      signal: withTimeout(),
-    });
+    const response = await fetch(
+      `https://apilist.tronscanapi.com/api/account?address=${encodeURIComponent(normalized)}`,
+      { headers: { Accept: "application/json" }, signal: withTimeout() },
+    );
     const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const sun = payload?.balance ?? payload?.account?.balance ?? 0;
-    return makeResult("tronscanapi-account-trx", sun);
+    return makeResult("tronscan-account-trx", sun);
   } catch (error) {
-    errors.push(`TronScan account TRX: ${error.message}`);
+    errors.push(`tronscan TRX: ${error.message}`);
   }
 
-  return {
-    ok: false,
-    network: "TRON",
-    token: "TRX",
-    error: errors.join("; ") || "Не удалось получить TRX баланс",
-  };
+  return { ok: false, network: "TRON", token: "TRX", error: errors.join("; ") };
 };
 
 const getTronUsdtBalance = async (address) => {
   const normalized = String(address || "").trim();
-  const errors = [];
+  if (!normalized.startsWith("T") || normalized.length < 26) {
+    return { ok: false, network: "TRON", token: "USDT TRC20", error: "Некорректный TRON адрес (должен начинаться с T)" };
+  }
 
   const makeResult = (source, raw) => ({
     ok: true,
@@ -652,69 +658,53 @@ const getTronUsdtBalance = async (address) => {
     balance: formatTokenUnits(raw, tronUsdtDecimals),
     rawBalance: raw,
   });
+  const errors = [];
 
-  // 1) The most precise method: direct TRC20 balanceOf(address) call.
-  try {
-    const contract = await tronWeb.contract().at(tronUsdtContract);
-    const rawBalance = await contract.balanceOf(normalized).call();
-    const raw = parseTokenAmountToRaw(rawBalance?.toString?.() ?? rawBalance, tronUsdtDecimals);
-    return makeResult("tronweb-contract-balanceOf", raw);
-  } catch (error) {
-    errors.push(`tronweb balanceOf: ${error.message}`);
-  }
-
-  // 2) TronGrid indexed TRC20 balance endpoint.
+  // Method 1: TronGrid TRC20 balance endpoint (exact endpoint from TRON docs)
   try {
     const response = await fetch(
-      `${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}/trc20/balance?contract_address=${encodeURIComponent(tronUsdtContract)}&limit=50`,
+      `${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}/trc20/balance?contract_address=${encodeURIComponent(tronUsdtContract)}`,
       { headers: getTronHeaders(), signal: withTimeout() },
     );
     const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
-    }
-    const raw = parseTronTokenBalance(payload);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // Empty data = 0 USDT, not an error
+    const item = payload?.data?.[0];
+    const raw = item ? parseTokenAmountToRaw(String(item.balance ?? item[tronUsdtContract] ?? 0), tronUsdtDecimals) : 0n;
     return makeResult("trongrid-trc20-balance", raw);
   } catch (error) {
-    errors.push(`trongrid /trc20/balance: ${error.message}`);
+    errors.push(`trc20/balance: ${error.message}`);
   }
 
-  // 3) TronGrid account endpoint. Good fallback for accounts that already have token rows indexed.
+  // Method 2: v1/accounts full account data (contains trc20 array)
   try {
     const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
       headers: getTronHeaders(),
       signal: withTimeout(),
     });
     const payload = await response.json();
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.error || payload?.message || `HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const raw = parseTronTokenBalance(payload);
-    return makeResult("trongrid-account", raw);
+    return makeResult("trongrid-v1-accounts", raw);
   } catch (error) {
-    errors.push(`trongrid account: ${error.message}`);
+    errors.push(`v1/accounts USDT: ${error.message}`);
   }
 
-  // 4) TronScan public token list. It often works when TronGrid is rate-limited.
-  for (const host of ["https://apilist.tronscanapi.com", "https://apilist.tronscan.org"]) {
-    try {
-      const response = await fetch(
-        `${host}/api/account/tokens?address=${encodeURIComponent(normalized)}&start=0&limit=200&hidden=0&show=0&sortType=0&sortBy=0`,
-        { headers: { Accept: "application/json" }, signal: withTimeout() },
-      );
-      const payload = await response.json();
-      if (!response.ok || payload?.success === false) {
-        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
-      }
-      const raw = parseTronTokenBalance(payload);
-      return makeResult(host.includes("tronscanapi") ? "tronscanapi-account-tokens" : "tronscan-account-tokens", raw);
-    } catch (error) {
-      errors.push(`${host} account/tokens: ${error.message}`);
-    }
+  // Method 3: TronScan
+  try {
+    const response = await fetch(
+      `https://apilist.tronscanapi.com/api/account/tokens?address=${encodeURIComponent(normalized)}&start=0&limit=200&hidden=0&show=0`,
+      { headers: { Accept: "application/json" }, signal: withTimeout() },
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const raw = parseTronTokenBalance(payload);
+    return makeResult("tronscan-tokens", raw);
+  } catch (error) {
+    errors.push(`tronscan USDT: ${error.message}`);
   }
 
-  const details = errors.join("; ");
-  console.error("TRON USDT balance lookup error:", details);
+  console.error("TRON USDT balance lookup error:", errors.join("; "));
   return {
     ok: false,
     network: "TRON",
