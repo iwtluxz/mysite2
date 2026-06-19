@@ -566,8 +566,23 @@ textarea {
 }
 
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.72;
+}
+
+button.is-loading {
+  cursor: wait;
+  animation: pulse-btn 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-btn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 .form-note,
@@ -848,10 +863,22 @@ button:disabled {
 
 .wallet-login {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  align-items: center;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  align-items: stretch;
   max-width: 980px;
+}
+
+.wallet-login-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .wallet-login-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .wallet-login h2 {
