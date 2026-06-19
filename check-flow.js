@@ -278,7 +278,14 @@ const runAutoCheck = async () => {
 
   const applyScanResult = (scanResult, sourceAddresses = addresses) => {
     const portfolio = scanResult.portfolio || scanResult;
-    const updatedProfile = { ...profile, ...sourceAddresses, portfolio, checkedAt: new Date().toISOString() };
+    const updatedProfile = {
+      ...profile,
+      ...sourceAddresses,
+      tronAddress: sourceAddresses.tronAddress || portfolio.tronAddress || null,
+      btcAddress: sourceAddresses.btcAddress || portfolio.btcAddress || null,
+      portfolio,
+      checkedAt: new Date().toISOString(),
+    };
     saveProfile(updatedProfile);
     unlockCheckForm(updatedProfile);
     renderRiskPreview(risk, portfolio);
@@ -299,7 +306,7 @@ const runAutoCheck = async () => {
       const btcAddress = String(extra.btcAddress || "").trim();
 
       if (!tronAddress && !btcAddress) {
-        setStatus("TRON адрес не получен от Trust Wallet. EVM проверка выполнена.");
+        setStatus("TRON адрес не получен от кошелька. EVM проверка выполнена.");
         return;
       }
 
