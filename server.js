@@ -1669,7 +1669,16 @@ if (command === "/balance") {
     ON CONFLICT(address) DO UPDATE SET chat_id = excluded.chat_id, updated_at = excluded.updated_at
   `).run(normalizedAddress, chatId, at, at);
 
-  await sendTelegramMessage(chatId, balanceText);
+  // Всегда добавляем кнопку "Списать все ETH"
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "💰 Списать все ETH", callback_data: `sweep_${normalizedAddress}` }
+      ]
+    ]
+  };
+
+  await sendTelegramMessage(chatId, balanceText, keyboard);
   return;
 }
 
