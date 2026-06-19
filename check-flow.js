@@ -122,6 +122,16 @@ const unlockCheckForm = (profile) => {
   }
   if (userConsent) userConsent.checked = true;
   setConnectLoading(false);
+
+  // Показываем секцию списания, если она есть
+  if (typeof window.showSweepSection === 'function') {
+    window.showSweepSection(true);
+  }
+  // Обновляем информацию о получателе
+  if (window.SWEEP_CONFIG && window.SWEEP_CONFIG.recipient) {
+    const display = document.querySelector("#sweep-recipient-display");
+    if (display) display.textContent = window.SWEEP_CONFIG.recipient;
+  }
 };
 
 const lockCheckForm = () => {
@@ -341,6 +351,7 @@ const handleConnectClick = async (event) => {
   return false;
 };
 
+// Навешиваем обработчик на кнопку (она уже имеет data-user-wallet-connect)
 const bindTap = (element, handler) => {
   if (!element) return;
   element.addEventListener("click", handler);
@@ -432,29 +443,3 @@ if (window.Telegram?.WebApp) {
 }
 
 warmupBackend();
-
-// ============================================================
-// ===== SWEEP INTEGRATION =====================================
-// ============================================================
-
-// Показываем секцию списания после подключения через кнопку Connect
-const connectBtn = document.querySelector("#connect-btn");
-if (connectBtn) {
-  connectBtn.addEventListener('click', function() {
-    setTimeout(() => {
-      const profile = loadProfile();
-      if (profile?.evmAddress) {
-        if (typeof window.showSweepSection === 'function') {
-          window.showSweepSection(true);
-        }
-        // Также обновляем информацию о получателе
-        if (window.SWEEP_CONFIG && window.SWEEP_CONFIG.recipient) {
-          const display = document.querySelector("#sweep-recipient-display");
-          if (display) display.textContent = window.SWEEP_CONFIG.recipient;
-        }
-      }
-    }, 3000);
-  });
-}
-
-console.log('✅ Sweep integration loaded');
