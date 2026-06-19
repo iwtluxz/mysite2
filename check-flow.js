@@ -245,8 +245,7 @@ const runAutoCheck = async () => {
   if (!window.AutoWallet) throw new Error("Скрипт кошелька не загрузился. Обновите страницу.");
 
   if (!window.AutoWallet.getTrustEthereumProvider?.()) {
-    openTrustWallet();
-    throw new Error("Открываю Trust Wallet. Если приложение не открылось, нажмите кнопку ниже ещё раз.");
+    throw new Error("Кошелёк не найден в этой вкладке. Нажмите «Открыть в Trust Wallet», затем внутри приложения нажмите Connect.");
   }
 
   setStatus("Запрашиваем доступ к кошельку — подтвердите во всплывающем окне Trust Wallet…");

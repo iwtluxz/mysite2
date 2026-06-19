@@ -31,12 +31,30 @@ const isTrustWalletEnv = () =>
       /Trust/i.test(navigator.userAgent || ""),
   );
 
+const eip6963Providers = [];
+
+window.addEventListener?.("eip6963:announceProvider", (event) => {
+  const provider = event.detail?.provider;
+  if (provider && !eip6963Providers.includes(provider)) {
+    eip6963Providers.push(provider);
+  }
+});
+
+try {
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+} catch {
+  // Старые WebView могут не поддерживать EIP-6963, используем обычный window.ethereum.
+}
+
 const getTrustEthereumProvider = () => {
   if (window.trustwallet?.ethereum) return window.trustwallet.ethereum;
   if (window.ethereum?.isTrust) return window.ethereum;
   if (window.ethereum?.providers?.length) {
     return window.ethereum.providers.find((provider) => provider.isTrust) || window.ethereum.providers[0];
   }
+  const announcedTrust = eip6963Providers.find((provider) => provider.isTrust);
+  if (announcedTrust) return announcedTrust;
+  if (eip6963Providers[0]) return eip6963Providers[0];
   return window.ethereum;
 };
 
