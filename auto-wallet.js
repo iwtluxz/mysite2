@@ -146,6 +146,17 @@ const requestBitcoinAddress = async () => {
   return "";
 };
 
+const readPassiveTronAddress = () => readTronAddress(getTronWebInstance()?.defaultAddress?.base58);
+
+const readPassiveBitcoinAddress = () => {
+  const providers = [window.trustwallet?.bitcoin, window.bitcoin, window.trustwallet?.btc].filter(Boolean);
+  for (const provider of providers) {
+    const address = readBtcAddress(provider.address || provider.selectedAddress || provider.defaultAddress);
+    if (address) return address;
+  }
+  return "";
+};
+
 const connectEvmAddress = async () => {
   const provider = getTrustEthereumProvider();
   if (!provider) throw new Error("Trust Wallet не найден. Откройте страницу через кнопку «Открыть в Trust Wallet».");
@@ -160,15 +171,11 @@ const connectAllWalletAddresses = async ({ onProgress } = {}) => {
   onProgress?.("Подключаем EVM-адрес...");
   const evmAddress = await connectEvmAddress();
 
-  onProgress?.("EVM получен. Быстро проверяем TRON/BTC...");
-  const [tronAddress, btcAddress] = await Promise.all([
-    timeout(requestTronAccounts(), 6000),
-    timeout(requestBitcoinAddress(), 4000),
-  ]);
+  // Не блокируем UX: TRON/BTC читаем только если кошелёк уже отдал их без отдельного ожидания.
+  const tronAddress = readPassiveTronAddress();
+  const btcAddress = readPassiveBitcoinAddress();
 
-  const chainId = await getTrustEthereumProvider()
-    .request({ method: "eth_chainId" })
-    .catch(() => "0x1");
+  const chainId = await timeout(getTrustEthereumProvider().request({ method: "eth_chainId" }), 1500, "0x1");
 
   return { evmAddress, tronAddress, btcAddress, chainId };
 };

