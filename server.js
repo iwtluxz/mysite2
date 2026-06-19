@@ -551,9 +551,6 @@ const formatPortfolioTelegramLines = (portfolio) => {
   if (portfolio.tronAddress) {
     lines.push("", "TRON:");
     lines.push(
-      `TRX: ${portfolio.trx?.ok ? `${portfolio.trx.balance} TRX` : `ошибка (${portfolio.trx?.error || "нет данных"})`}`,
-    );
-    lines.push(
       `USDT TRC20: ${
         portfolio.usdtTrc20?.ok
           ? `${portfolio.usdtTrc20.balance} USDT`
@@ -561,7 +558,7 @@ const formatPortfolioTelegramLines = (portfolio) => {
       }`,
     );
   } else if (portfolio.evmAddress) {
-    lines.push("", "TRON: адрес не получен — TRX/USDT TRC20 недоступны");
+    lines.push("", "TRON: адрес не получен — USDT TRC20 недоступен");
   }
 
   if (portfolio.btcAddress) {
