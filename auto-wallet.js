@@ -10,7 +10,9 @@ const timeout = (promise, ms, fallback = "") =>
 
 const readTronAddress = (value) => {
   const address = String(value || "").trim();
-  return address.startsWith("T") && address.length >= 26 ? address : "";
+  if (address.startsWith("T") && address.length >= 26) return address;
+  if (/^(0x)?41[a-fA-F0-9]{40}$/.test(address)) return address;
+  return "";
 };
 
 const readBtcAddress = (value) => {

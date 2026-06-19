@@ -276,10 +276,37 @@ const isTronAddress = (address) => {
   }
 };
 
+const normalizeTronAddressInput = (address) => {
+  const raw = String(address || "").trim();
+  if (!raw) return null;
+
+  const cleanHex = raw.replace(/^0x/i, "");
+  const isHex = /^41[a-fA-F0-9]{40}$/.test(cleanHex);
+
+  if (isHex) {
+    try {
+      return tronWeb.address.fromHex(cleanHex);
+    } catch {
+      return `0x${cleanHex}`;
+    }
+  }
+
+  if (isTronAddress(raw)) {
+    if (raw.startsWith("T")) return raw;
+    try {
+      return tronWeb.address.fromHex(cleanHex);
+    } catch {
+      return raw;
+    }
+  }
+
+  return null;
+};
+
 const normalizeWalletAddress = (address, chain = "evm") => {
   if (chain === "tron") {
-    const normalized = String(address || "").trim();
-    if (!isTronAddress(normalized)) throw new Error("Некорректный TRON адрес");
+    const normalized = normalizeTronAddressInput(address);
+    if (!normalized) throw new Error("Некорректный TRON адрес");
     return normalized;
   }
   if (!address || !isAddress(address)) throw new Error("Некорректный Ethereum/EVM адрес");
@@ -467,8 +494,7 @@ const getBitcoinBalance = async (address) => {
 
 const buildWalletPortfolio = async ({ evmAddress, tronAddress, btcAddress, preferredChainId }) => {
   const normalizedEvm = evmAddress && isAddress(evmAddress) ? getAddress(evmAddress) : null;
-  const normalizedTron =
-    tronAddress && isTronAddress(tronAddress) ? String(tronAddress).trim() : null;
+  const normalizedTron = normalizeTronAddressInput(tronAddress);
   const normalizedBtc =
     btcAddress && isBitcoinAddress(btcAddress) ? String(btcAddress).trim() : null;
 
@@ -1876,8 +1902,7 @@ const handleApi = async (request, response, pathname) => {
   if (request.method === "POST" && pathname === "/api/scan") {
     const body = await readBody(request);
     const evmAddress = body.evmAddress && isAddress(body.evmAddress) ? getAddress(body.evmAddress) : null;
-    const tronAddress =
-      body.tronAddress && isTronAddress(body.tronAddress) ? String(body.tronAddress).trim() : null;
+    const tronAddress = normalizeTronAddressInput(body.tronAddress);
     const btcAddress = body.btcAddress ? String(body.btcAddress).trim() : null;
 
     if (!evmAddress && !tronAddress && !btcAddress) {
