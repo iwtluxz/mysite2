@@ -4,11 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Контакты | AML Best</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="theme-color" content="#030303" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=neon2" />
   </head>
   <body>
     <header class="site-header" data-header>
-      <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
+      <a class="brand" href="index.html" aria-label="AML Best"><span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span><span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span></a>
       <nav class="nav" aria-label="Основная навигация">
         <a href="check.html">Проверка</a>
         <a href="features.html">Возможности</a>
@@ -21,9 +25,9 @@
     <main class="page-main">
       <section class="section contact">
         <div>
-          <p class="section-kicker">Контакты</p>
-          <h1 class="page-title">Нужна интеграция или расширенная проверка?</h1>
-          <p>Оставьте заявку. Она сохранится в базе и появится в админ-панели.</p>
+          <p class="section-kicker">Business enquiries</p>
+          <h1 class="page-title">Интеграция, расширенная проверка или корпоративный доступ</h1>
+          <p>Опишите задачу и контакт для связи. Обращение будет зарегистрировано в закрытом административном контуре.</p>
         </div>
         <form class="contact-form" data-contact-form>
           <input name="name" type="text" placeholder="Ваше имя" aria-label="Ваше имя" required />
@@ -44,4 +48,3 @@
     <script src="script.js?v=auto-wallet-fix2"></script>
   </body>
 </html>
-

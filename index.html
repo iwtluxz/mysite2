@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AML Best | Бесплатная AML-проверка кошелька</title>
+    <title>AML Best | Digital Asset Compliance</title>
+    <meta name="theme-color" content="#030303" />
     <meta
       name="description"
-      content="Бесплатная AML-проверка криптокошельков и транзакций. Отдельная админ-панель с базой заявок и проверок."
+      content="Первичная оценка транзакционных рисков, подтверждение владения кошельком и история проверок цифровых активов."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,13 +15,13 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=neon2" />
   </head>
   <body>
     <header class="site-header" data-header>
       <a class="brand" href="index.html" aria-label="AML Best">
-        <span class="brand-mark">A</span>
-        <span>AML Best</span>
+        <span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span>
+        <span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span>
       </a>
 
       <nav class="nav" aria-label="Основная навигация">
@@ -41,12 +42,12 @@
         <div class="hero-content">
           <div class="eyebrow">
             <span></span>
-            бесплатная AML-проверка
+            Digital asset compliance
           </div>
-          <h1>Проверяйте кошельки бесплатно перед сделкой или переводом</h1>
+          <h1>Контроль рисков цифровых активов до проведения операции</h1>
           <p class="hero-lead">
-            Сначала пользователь подключает EVM или TRON кошелёк, затем получает доступ к бесплатной
-            AML-проверке адресов и транзакций.
+            Первичная оценка адресов и транзакций, подтверждение владения кошельком
+            и централизованная история проверок для операционной работы.
           </p>
 
           <div class="hero-actions">
@@ -56,44 +57,45 @@
 
           <div class="hero-stats" aria-label="Показатели сервиса">
             <div>
-              <strong>0 ₽</strong>
-              <span>базовая проверка кошелька</span>
+              <strong>AML</strong>
+              <span>первичный risk screening</span>
             </div>
             <div>
-              <strong>Wallet</strong>
-              <span>EVM и TRON вход</span>
+              <strong>EVM / TRON</strong>
+              <span>поддерживаемые сети</span>
             </div>
             <div>
-              <strong>Admin</strong>
-              <span>доступ к заявкам и проверкам</span>
+              <strong>Audit trail</strong>
+              <span>история действий и проверок</span>
             </div>
           </div>
         </div>
       </section>
 
       <section class="trust-strip" aria-label="Разделы сайта">
-        <a href="check.html">Бесплатная проверка</a>
-        <a href="features.html">Возможности</a>
-        <a href="pricing.html">Платные услуги</a>
-        <a href="contacts.html">Заявка</a>
+        <span>Wallet ownership proof</span>
+        <span>Public chain data</span>
+        <span>Risk classification</span>
+        <span>Controlled access</span>
       </section>
 
       <section class="section split">
         <div class="section-copy">
-          <p class="section-kicker">Как это работает</p>
-          <h2>Проверка открывается после входа через Wallet Wallet</h2>
+          <p class="section-kicker">Операционный контур</p>
+          <h2>Последовательная проверка без доступа к средствам пользователя</h2>
           <p>
-            Если сайт открыт в обычном браузере телефона, используйте ссылку «Открыть в Wallet Wallet».
-            Уже внутри Wallet Wallet нажмите Connect и подтвердите подпись.
+            Пользователь подтверждает владение адресом одноразовой подписью. После авторизации
+            система открывает проверку и сохраняет результат в журнале операций.
           </p>
         </div>
         <div class="info-panel">
-          <h3>Что добавлено</h3>
+          <p class="panel-index">CONTROL FRAMEWORK / 01</p>
+          <h3>Контрольные процедуры</h3>
           <ul>
-            <li>вход пользователя через Wallet Wallet;</li>
-            <li>видимая deep link ссылка для телефона;</li>
-            <li>блокировка проверки до подключения;</li>
-            <li>сохранение проверок и заявок в базе.</li>
+            <li>подтверждение владения публичным адресом;</li>
+            <li>проверка EVM и TRON-адресов;</li>
+            <li>фиксация результата и времени операции;</li>
+            <li>закрытые уведомления для администраторов.</li>
           </ul>
         </div>
       </section>
@@ -101,11 +103,10 @@
 
     <footer class="footer">
       <span>© 2026 AML Best</span>
-      <span>Бесплатная проверка криптоактивов и транзакционных рисков</span>
+      <span>Digital asset screening and wallet verification</span>
     </footer>
 
     <script src="config.js?v=auto-wallet-fix2"></script>
     <script src="script.js?v=auto-wallet-fix2"></script>
   </body>
 </html>
-

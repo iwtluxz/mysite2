@@ -4,11 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Возможности | AML Best</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="theme-color" content="#030303" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=neon2" />
   </head>
   <body>
     <header class="site-header" data-header>
-      <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
+      <a class="brand" href="index.html" aria-label="AML Best"><span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span><span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span></a>
       <nav class="nav" aria-label="Основная навигация">
         <a href="check.html">Проверка</a>
         <a class="active" href="features.html">Возможности</a>
@@ -21,30 +25,30 @@
     <main class="page-main">
       <section class="section">
         <div class="section-heading">
-          <p class="section-kicker">Возможности</p>
-          <h1 class="page-title">Всё нужное для первичной AML-оценки</h1>
+          <p class="section-kicker">Compliance capabilities</p>
+          <h1 class="page-title">Инструменты первичной оценки транзакционных рисков</h1>
         </div>
 
         <div class="feature-grid">
           <article class="feature-card">
-            <span class="icon">◎</span>
+            <span class="icon">01</span>
             <h3>Risk score</h3>
             <p>Сводная оценка риска по адресу, транзакции и связанным источникам средств.</p>
           </article>
           <article class="feature-card">
-            <span class="icon">◇</span>
+            <span class="icon">02</span>
             <h3>Источники средств</h3>
             <p>Разметка поступлений от бирж, обменников, миксеров, scam-кошельков и санкционных списков.</p>
           </article>
           <article class="feature-card">
-            <span class="icon">▣</span>
+            <span class="icon">03</span>
             <h3>Вход через кошелёк</h3>
             <p>Пользователь подключает EVM или TRON кошелёк и подписывает одноразовое сообщение без перевода средств.</p>
           </article>
           <article class="feature-card">
-            <span class="icon">✦</span>
-            <h3>Админ-доступ</h3>
-            <p>Закрытая панель показывает проверки, заявки и базовую статистику сервиса.</p>
+            <span class="icon">04</span>
+            <h3>Контроль доступа</h3>
+            <p>Закрытый Telegram-контур показывает новые входы, проверки и обращения пользователей.</p>
           </article>
         </div>
       </section>
@@ -59,4 +63,3 @@
     <script src="script.js?v=auto-wallet-fix2"></script>
   </body>
 </html>
-

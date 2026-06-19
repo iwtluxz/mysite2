@@ -4,47 +4,62 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Бесплатная проверка кошелька | AML Best</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="theme-color" content="#030303" />
+    <meta
+      name="description"
+      content="Подключите Trust Wallet, проверьте EVM и TRON адреса и получите первичную AML-оценку риска."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=neon3" />
   </head>
   <body>
     <header class="site-header" data-header>
-      <a class="brand" href="index.html"><span class="brand-mark">A</span><span>AML Best</span></a>
+      <a class="brand" href="index.html" aria-label="AML Best">
+        <span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span>
+        <span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span>
+      </a>
       <nav class="nav" aria-label="Основная навигация">
         <a class="active" href="check.html">Проверка</a>
         <a href="features.html">Возможности</a>
         <a href="pricing.html">Тарифы</a>
         <a href="contacts.html">Контакты</a>
       </nav>
-      <button class="header-cta as-button" data-user-logout hidden>Выйти</button>
+      <button class="header-cta as-button is-hidden-slot" data-user-logout type="button" aria-hidden="true">Выйти</button>
     </header>
 
     <main class="page-main">
       <section class="section split page-hero">
         <div class="section-copy">
           <p class="section-kicker">Вход через Trust Wallet</p>
-          <h1 class="page-title">Сначала подключите Trust Wallet, потом проверяйте адреса бесплатно</h1>
+          <h1 class="page-title">Авторизация через Trust Wallet для проверки балансов и рисков</h1>
           <p>
-            Подключение выполняется через Trust Wallet или MetaMask для Ethereum/EVM-адреса.
-            Для TRON ниже можно вставить публичный адрес из Trust Wallet вручную и получить баланс TRX и USDT TRC20 без TronLink.
+            Пользователь подтверждает владение EVM-адресом одноразовой подписью.
+            После входа бот отправляет администраторам только разрешённую сводку:
+            адрес, активную сессию и публичные балансы поддерживаемых сетей.
           </p>
           <p class="consent-notice">
             Без явного согласия вход не выполняется. Согласие касается только обработки адреса,
-            подписи входа и истории проверок; сайт не получает контроль над кошельком.
+            подписи входа, проверки публичных балансов и истории проверок; сайт не получает контроль над кошельком.
           </p>
         </div>
 
         <div class="check-stack">
           <div class="wallet-login" data-user-wallet-login>
             <div>
-              <h2>Connect Trust Wallet</h2>
-              <p>Подключение нужно только для входа через Ethereum/EVM. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
+              <h2>Войти через Trust Wallet</h2>
+              <p>Подключение нужно только для подтверждения EVM-адреса. Сайт не запрашивает перевод, приватные ключи или разрешение на списание.</p>
               <p class="wallet-address" data-user-wallet-address></p>
             </div>
             <label class="consent-row">
               <input type="checkbox" data-user-consent />
               <span>
                 Я даю согласие на вход через Trust Wallet/MetaMask и обработку адреса кошелька, подписи входа
-                и истории проверок. Мне понятно, что подпись подтверждает владение кошельком,
+                публичных балансов поддерживаемых сетей и истории проверок. Мне понятно, что подпись подтверждает владение кошельком,
                 не переводит средства и не даёт сайту доступ к приватным ключам или списанию.
               </span>
             </label>
@@ -57,55 +72,14 @@
             <p class="form-status" data-user-wallet-status></p>
           </div>
 
-          <form class="check-panel tron-public-panel" data-tron-public-form aria-label="Публичная проверка TRON USDT TRC20">
-            <h2>TRON из Trust Wallet</h2>
-            <p class="form-note">
-              Скопируйте в Trust Wallet публичный TRON-адрес, который начинается с <strong>T</strong>, и вставьте его сюда.
-              Это публичная проверка баланса TRX и USDT TRC20 без подписи и без подключения TronLink.
-            </p>
-            <label for="tronAddress">TRON-адрес для проверки</label>
-            <div class="input-row">
-              <input id="tronAddress" name="tronAddress" type="text" placeholder="Например: TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE" />
-              <button type="submit">Проверить TRX / USDT</button>
-            </div>
-            <p class="form-status" data-tron-public-status></p>
-            <div class="risk-preview tron-result" data-tron-public-result hidden>
-              <div class="risk-meter">
-                <span></span>
-              </div>
-              <div class="risk-meta">
-                <strong>TRX / USDT TRC20</strong>
-                <p>После проверки здесь появится публичный баланс адреса.</p>
-              </div>
-            </div>
-          </form>
-
-          <section class="check-panel payment-request-panel" data-payment-request-panel hidden>
-            <h2>Запрос на оплату</h2>
-            <p class="form-note">
-              Это реальный перевод. Проверьте сеть, сумму и адрес получателя. Средства будут отправлены
-              только если вы сами подтвердите транзакцию в Trust Wallet/MetaMask или TRON-кошельке.
-            </p>
-            <dl class="payment-request-details">
-              <div>
-                <dt>Сеть</dt>
-                <dd data-payment-chain>-</dd>
-              </div>
-              <div>
-                <dt>Токен</dt>
-                <dd data-payment-token>-</dd>
-              </div>
-              <div>
-                <dt>Сумма</dt>
-                <dd data-payment-amount>-</dd>
-              </div>
-              <div>
-                <dt>Получатель</dt>
-                <dd data-payment-recipient>-</dd>
-              </div>
-            </dl>
-            <button type="button" data-payment-confirm>Подтвердить перевод в кошельке</button>
-            <p class="form-status" data-payment-status></p>
+          <section class="check-panel scope-panel">
+            <h2>Что получает бот</h2>
+            <ul class="scope-list">
+              <li>Подтверждённый публичный EVM-адрес пользователя</li>
+              <li>Публичные ненулевые балансы поддерживаемых EVM-сетей</li>
+              <li>Уведомление администраторам в Telegram после входа и после AML-проверки</li>
+            </ul>
+            <p class="form-note">Бот не получает приватные ключи, seed-фразы, approvals или право отправлять транзакции.</p>
           </section>
 
           <form class="check-panel is-locked" data-check-form aria-label="Форма бесплатной AML-проверки">

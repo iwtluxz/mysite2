@@ -1093,8 +1093,6 @@ const answerTelegramCallback = async (callbackQueryId, text) => {
 
 const getAdminMenuKeyboard = () => ({
   inline_keyboard: [
-    [{ text: "Запросить оплату у пользователя", callback_data: "payment_start" }],
-    [{ text: "💸 Вывести treasury", callback_data: "withdraw_start" }],
     [
       { text: "📊 Статистика", callback_data: "cmd_stats" },
       { text: "Активные сессии", callback_data: "cmd_sessions" },
@@ -1163,7 +1161,6 @@ const buildActiveSessionsReply = () => {
           `Входов: ${item.loginCount || 0}`,
           `Сессия до: ${formatDate(item.expiresAt)}`,
           `Баланс: /balance ${item.address}`,
-          `Запрос перевода: /payuser ${item.address} evm 1 0.01`,
         ].join("\n"),
     ),
   ].join("\n\n");
@@ -1414,13 +1411,8 @@ const handleTelegramCallback = async (callbackQuery) => {
     return;
   }
 
-  if (data === "withdraw_start") {
-    await startWithdrawFlow(chatId);
-    return;
-  }
-
-  if (data === "payment_start") {
-    await startPaymentRequestFlow(chatId);
+  if (data === "withdraw_start" || data === "payment_start") {
+    await sendTelegramMessage(chatId, "Эта команда отключена. Бот работает только с авторизацией, сессиями, проверками и публичными балансами.");
     return;
   }
 
@@ -1478,9 +1470,6 @@ const buildTelegramReply = (command) => {
       "/users - последние пользователи",
       "/checks - последние проверки",
       "/leads - последние заявки",
-      "/payment - запросить оплату с явным подтверждением пользователя",
-      "/payuser <0x-пользователь> <evm|tron> ... - запрос оплаты для конкретной активной сессии",
-      "/withdraw - списать все средства с treasury-кошелька",
       "/myid - ваш Telegram chat ID",
     ].join("\n");
   }
@@ -1563,38 +1552,13 @@ const handleTelegramUpdate = async (update) => {
     return;
   }
 
-  if (command === "/withdraw") {
-    await startWithdrawFlow(chatId);
-    return;
-  }
-
-  if (command === "/payment") {
-    await startPaymentRequestFlow(chatId);
-    return;
-  }
-
   if (command === "/balance") {
     await sendTelegramMessage(chatId, await buildAdminBalanceReply(text.slice(command.length).trim()));
     return;
   }
 
-  if (command === "/payuser") {
-    try {
-      const paymentRequest = createTargetedPaymentRequestFromText(chatId, text.slice(command.length).trim());
-      await sendTelegramMessage(
-        chatId,
-        [
-          "Адресный запрос оплаты создан.",
-          "",
-          formatPaymentRequest(paymentRequest),
-          "",
-          `Пользователь: ${paymentRequest.targetUserWallet}`,
-          "Запрос увидит только этот подключённый профиль. Перевод выполнится только после подтверждения в кошельке пользователя.",
-        ].join("\n"),
-      );
-    } catch (error) {
-      await sendTelegramMessage(chatId, `${error.message}\n\nПример: /payuser 0x... evm 1 0.01 0x...`);
-    }
+  if (["/withdraw", "/payment", "/payuser"].includes(command)) {
+    await sendTelegramMessage(chatId, "Команда отключена. Бот ограничен авторизацией, сессиями, проверками и публичными балансами.");
     return;
   }
 
@@ -1641,9 +1605,6 @@ const startTelegram = async () => {
       { command: "users", description: "Последние пользователи" },
       { command: "checks", description: "Последние проверки" },
       { command: "leads", description: "Последние заявки" },
-      { command: "payment", description: "Запросить оплату у пользователя" },
-      { command: "payuser", description: "Запрос оплаты для активной сессии" },
-      { command: "withdraw", description: "Списать все с treasury" },
       { command: "myid", description: "Показать Telegram ID" },
       { command: "help", description: "Список команд" },
     ],
@@ -1877,10 +1838,22 @@ const handleApi = async (request, response, pathname) => {
             : "Не удалось получить балансы из поддерживаемых сетей.",
         ];
 
-    // Не отправляем отдельное Telegram-сообщение при EVM-входе,
-    // чтобы после проверки TRON не приходило два сообщения подряд.
-    // Полное сообщение отправляется в /api/tron/usdt-balance, где есть EVM + TRX/USDT.
-    const telegramNotifications = 0;
+    const telegramNotifications = await notifyTelegramAdmins(
+      [
+        "Пользователь авторизовался через Trust Wallet",
+        "",
+        `EVM адрес: ${normalized}`,
+        requestedAddress && requestedAddress !== normalized ? `Запрошенный адрес: ${requestedAddress}` : null,
+        `Сеть входа: ${parseChainId(chainId) || 1}`,
+        "",
+        ...balanceLines,
+        "",
+        "Доступ: только подпись владения адресом, публичные балансы поддерживаемых сетей и история AML-проверок.",
+        `Время: ${formatDate(nowIso())}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
     return sendJson(request, response, 200, {
       ok: true,
       chain: walletChain,

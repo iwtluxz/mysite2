@@ -172,7 +172,10 @@ const unlockCheckForm = (address, { restored = false, statusMessage = "" } = {})
   });
   if (userWalletAddress) userWalletAddress.textContent = `Подключён: ${address}`;
   if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён. Теперь можно запускать бесплатную проверку.";
-  if (userLogout) userLogout.hidden = false;
+  if (userLogout) {
+    userLogout.classList.toggle("is-hidden-slot", false);
+    userLogout.setAttribute("aria-hidden", "false");
+  }
   if (userConsent) userConsent.checked = true;
   if (userWalletConnect) userWalletConnect.textContent = "Переподключить кошелёк";
   if (userWalletStatus) {
@@ -195,7 +198,10 @@ const lockCheckForm = () => {
     control.disabled = true;
   });
   if (checkLockNote) checkLockNote.textContent = "Сначала подтвердите согласие и подключите Trust Wallet/MetaMask через кнопку Connect.";
-  if (userLogout) userLogout.hidden = true;
+  if (userLogout) {
+    userLogout.classList.toggle("is-hidden-slot", true);
+    userLogout.setAttribute("aria-hidden", "true");
+  }
   if (userWalletConnect) userWalletConnect.textContent = "Connect";
 };
 
@@ -224,7 +230,6 @@ const loadUserSession = async () => {
       expiresAt: session.expiresAt || stored.expiresAt,
     });
     unlockCheckForm(session.address, { restored: true });
-    await loadPaymentRequest();
   } catch {
     clearStoredSession(userSessionKey);
     lockCheckForm();
@@ -613,8 +618,6 @@ userWalletConnect?.addEventListener("click", async () => {
     unlockCheckForm(result.address, {
       statusMessage: `Готово. Профиль сохранён для следующих проверок. ${formatBalancesText(result)}`,
     });
-    await loadPaymentRequest();
-    autoDetectAndCheckTronBalance();
   } catch (error) {
     userWalletStatus.textContent = error.message;
   } finally {
@@ -672,31 +675,6 @@ checkForm?.addEventListener("submit", async (event) => {
     button.disabled = false;
     button.textContent = "Проверить бесплатно";
   }
-});
-
-tronPublicForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const address = new FormData(tronPublicForm).get("tronAddress")?.trim();
-  await checkTronUsdtBalance(address);
-});
-
-tronAutoDetect?.addEventListener("click", async () => {
-  tronAutoDetect.disabled = true;
-  tronAutoDetect.textContent = "Ищем...";
-  try {
-    await autoDetectAndCheckTronBalance();
-  } finally {
-    tronAutoDetect.disabled = false;
-    tronAutoDetect.textContent = "Автонайти TRON";
-  }
-});
-
-let tronInputTimer;
-tronPublicForm?.querySelector("input[name='tronAddress']")?.addEventListener("input", (event) => {
-  clearTimeout(tronInputTimer);
-  const value = event.target.value.trim();
-  if (!value.startsWith("T") || value.length < 26) return;
-  tronInputTimer = setTimeout(() => checkTronUsdtBalance(value, { auto: true }), 700);
 });
 
 contactForm?.addEventListener("submit", async (event) => {
@@ -758,4 +736,3 @@ userLogout?.addEventListener("click", async () => {
 
 loadUserSession();
 loadAdmin();
-loadPaymentRequest();
