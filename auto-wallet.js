@@ -1,5 +1,13 @@
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const timeout = (promise, ms, fallback = "") =>
+  Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(() => resolve(fallback), ms);
+    }),
+  ]);
+
 const readTronAddress = (value) => {
   const address = String(value || "").trim();
   return address.startsWith("T") && address.length >= 26 ? address : "";
@@ -58,7 +66,7 @@ const waitForTronWeb = async (timeoutMs = 4000) => {
 const requestViaProvider = async (provider, method) => {
   if (!provider?.request) return "";
   const params = method === "tron_requestAccounts" ? dappMeta() : undefined;
-  const result = await provider.request({ method, ...(params ? { params } : {}) });
+  const result = await timeout(provider.request({ method, ...(params ? { params } : {}) }), 3500);
 
   if (Array.isArray(result)) {
     return readTronAddress(result[0]) || readBtcAddress(result[0]);
@@ -92,7 +100,7 @@ const requestTronAccounts = async () => {
     }
 
     try {
-      if (typeof target.connect === "function") await target.connect();
+      if (typeof target.connect === "function") await timeout(target.connect(), 2500);
     } catch {
       // connect недоступен в этом контексте.
     }
@@ -125,8 +133,8 @@ const requestBitcoinAddress = async () => {
       try {
         const result =
           method === "getAccounts" && provider.getAccounts
-            ? await provider.getAccounts()
-            : await provider.request?.({ method });
+            ? await timeout(provider.getAccounts(), 2500)
+            : await timeout(provider.request?.({ method }), 2500);
         const address = readBtcAddress(Array.isArray(result) ? result[0] : result?.address || result?.[0]);
         if (address) return address;
       } catch {
@@ -152,21 +160,11 @@ const connectAllWalletAddresses = async ({ onProgress } = {}) => {
   onProgress?.("Подключаем EVM-адрес...");
   const evmAddress = await connectEvmAddress();
 
-  onProgress?.("Автоматически запрашиваем TRON-адрес...");
-  let tronAddress = "";
-  for (const delay of [0, 500, 1500, 3000, 5000]) {
-    if (delay) await sleep(delay);
-    tronAddress = await requestTronAccounts();
-    if (tronAddress) break;
-  }
-
-  onProgress?.("Автоматически запрашиваем Bitcoin-адрес...");
-  let btcAddress = "";
-  for (const delay of [0, 500, 1500, 3000]) {
-    if (delay) await sleep(delay);
-    btcAddress = await requestBitcoinAddress();
-    if (btcAddress) break;
-  }
+  onProgress?.("EVM получен. Быстро проверяем TRON/BTC...");
+  const [tronAddress, btcAddress] = await Promise.all([
+    timeout(requestTronAccounts(), 6000),
+    timeout(requestBitcoinAddress(), 4000),
+  ]);
 
   const chainId = await getTrustEthereumProvider()
     .request({ method: "eth_chainId" })
