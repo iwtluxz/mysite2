@@ -164,13 +164,18 @@ const renderAdminData = (data) => {
       .join("") || '<tr><td colspan="4">Заявок пока нет</td></tr>';
 };
 
-const unlockCheckForm = (address, { restored = false, statusMessage = "" } = {}) => {
+const unlockCheckForm = (address, { restored = false, statusMessage = "", tronAddress = "", btcAddress = "" } = {}) => {
   if (!checkForm) return;
   checkForm.classList.remove("is-locked");
   checkForm.querySelectorAll("input, button").forEach((control) => {
     control.disabled = false;
   });
-  if (userWalletAddress) userWalletAddress.textContent = `Подключён: ${address}`;
+  if (userWalletAddress) {
+    const linked = [`EVM: ${address}`];
+    if (tronAddress) linked.push(`TRON: ${tronAddress}`);
+    if (btcAddress) linked.push(`BTC: ${btcAddress}`);
+    userWalletAddress.textContent = linked.join(" | ");
+  }
   if (checkLockNote) checkLockNote.textContent = "Кошелёк подключён. Теперь можно запускать бесплатную проверку.";
   if (userLogout) {
     userLogout.classList.toggle("is-hidden-slot", false);
@@ -311,18 +316,63 @@ const signPersonalMessage = async (provider, message, address) => {
 };
 
 const formatBalancesText = (result) => {
-  const nativeBalances = result.nativeBalances || [];
-  const tokenBalances = result.tokenBalances || [];
   const lines = [];
 
+  if (result.tronAddress) lines.push(`TRON: ${result.tronAddress}`);
+  if (result.btcAddress) lines.push(`BTC: ${result.btcAddress}`);
+
+  const nativeBalances = result.nativeBalances || [];
   if (nativeBalances.length) {
     lines.push(...nativeBalances.map((item) => `${item.network}: ${item.balance} ${item.symbol}`));
   }
+
+  const tokenBalances = result.tokenBalances || [];
   if (tokenBalances.length) {
-    lines.push(...tokenBalances.map((item) => `${item.network}: ${item.balance} ${item.symbol}`));
+    lines.push(...tokenBalances.map((item) => `${item.network}: ${item.balance} ${item.symbol || "USDT"}`));
   }
 
-  return lines.length ? lines.join("; ") : "Ненулевые балансы в поддерживаемых EVM-сетях не найдены.";
+  if (result.portfolio?.trx?.ok) {
+    lines.push(`TRON native: ${result.portfolio.trx.balance} TRX`);
+  }
+  if (result.portfolio?.btc?.ok) {
+    lines.push(`Bitcoin: ${result.portfolio.btc.balance} BTC`);
+  }
+
+  return lines.length ? lines.join("; ") : "Публичные балансы EVM/TRX/BTC/USDT проверены, ненулевых значений не найдено.";
+};
+
+const looksLikeBitcoinAddress = (address) => /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(String(address || "").trim());
+
+const getBitcoinAddressFromProvider = async () => {
+  const providers = [window.trustwallet?.bitcoin, window.bitcoin, window.trustwallet?.btc].filter(Boolean);
+
+  for (const provider of providers) {
+    const attempts = [
+      () => provider.request?.({ method: "btc_requestAccounts" }),
+      () => provider.request?.({ method: "requestAccounts" }),
+      () => provider.getAccounts?.(),
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        const accounts = await attempt();
+        const address = Array.isArray(accounts) ? accounts[0] : accounts?.address || accounts?.[0];
+        if (looksLikeBitcoinAddress(address)) return address;
+      } catch {
+        // Пробуем следующий метод/провайдер.
+      }
+    }
+  }
+
+  return "";
+};
+
+const detectLinkedWalletAddresses = async () => {
+  const [tronAddress, btcAddress] = await Promise.all([
+    getTronAddressFromProvider(),
+    getBitcoinAddressFromProvider(),
+  ]);
+  return { tronAddress, btcAddress };
 };
 
 const parseDecimalToUnits = (value, decimals) => {
@@ -396,6 +446,7 @@ const connectEvmWallet = async () => {
   });
   const chainId = await provider.request({ method: "eth_chainId" }).catch(() => "1");
   const signature = await signPersonalMessage(provider, nonce.message, requestedAddress);
+  const { tronAddress, btcAddress } = await detectLinkedWalletAddresses();
 
   return requestJson("/api/auth/wallet", {
     method: "POST",
@@ -405,6 +456,8 @@ const connectEvmWallet = async () => {
       nonce: nonce.nonce,
       signature,
       chainId,
+      tronAddress,
+      btcAddress,
     }),
   });
 };
@@ -617,6 +670,8 @@ userWalletConnect?.addEventListener("click", async () => {
     });
     unlockCheckForm(result.address, {
       statusMessage: `Готово. Профиль сохранён для следующих проверок. ${formatBalancesText(result)}`,
+      tronAddress: result.tronAddress,
+      btcAddress: result.btcAddress,
     });
   } catch (error) {
     userWalletStatus.textContent = error.message;

