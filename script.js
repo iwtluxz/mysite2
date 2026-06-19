@@ -22,8 +22,10 @@ const paymentStatus = document.querySelector("[data-payment-status]");
 const configuredApiBase = (window.AML_API_BASE || "").replace(/\/$/, "");
 const isHttpPage = location.protocol === "http:" || location.protocol === "https:";
 const isStaticGitHubPage = location.hostname.endsWith(".github.io");
-const apiBase = configuredApiBase;
-const useBackend = Boolean(configuredApiBase) || (isHttpPage && !isStaticGitHubPage);
+const isOnRenderHost = /\.onrender\.com$/i.test(location.hostname);
+const apiBase = isOnRenderHost ? "" : configuredApiBase;
+const renderCheckUrl = configuredApiBase ? `${configuredApiBase}/check.html` : `${location.origin}/check.html`;
+const useBackend = Boolean(configuredApiBase) || isOnRenderHost || (isHttpPage && !isStaticGitHubPage);
 const userSessionKey = "aml_user_session";
 const adminSessionKey = "aml_admin_session";
 const localChecksKey = "aml_local_checks";
@@ -40,13 +42,34 @@ const isStoredSessionExpired = (session) =>
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 90000) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(Object.assign(new Error("timeout"), { name: "AbortError" }));
+    }, timeoutMs);
+  });
+
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await Promise.race([fetch(url, options), timeoutPromise]);
   } finally {
     clearTimeout(timer);
   }
+};
+
+const buildFetchOptions = (options = {}, token) => {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+
+  return {
+    method,
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store",
+    headers,
+    ...(options.body ? { body: options.body } : {}),
+  };
 };
 
 const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 } = {}) => {
@@ -58,14 +81,7 @@ const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 }
     try {
       const response = await fetchWithTimeout(
         fullUrl,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...(options.headers || {}),
-          },
-          ...options,
-        },
+        buildFetchOptions(options, token),
         timeoutMs,
       );
 
@@ -78,13 +94,18 @@ const requestJson = async (url, options = {}, { retries = 2, timeoutMs = 90000 }
     }
   }
 
-  if (!apiBase) {
+  if (!apiBase && !isOnRenderHost) {
     throw new Error("Backend не подключён. Укажите AML_API_BASE в config.js и разверните server.js.");
   }
 
   const reason = lastError?.name === "AbortError" ? "превышено время ожидания" : "сеть недоступна";
+  const renderHint =
+    isStaticGitHubPage && configuredApiBase
+      ? ` Для Trust Wallet откройте ${renderCheckUrl} — там API на том же домене.`
+      : " На бесплатном Render сервер может просыпаться до 60 секунд — подождите и нажмите Connect ещё раз.";
+
   throw new Error(
-    `Backend недоступен (${apiBase}, ${reason}). На бесплатном Render сервер может просыпаться до 60 секунд — подождите и нажмите Connect ещё раз.`,
+    `Backend недоступен (${configuredApiBase || location.origin}, ${reason}).${renderHint}`,
   );
 };
 
@@ -318,8 +339,9 @@ const getTrustProvider = () => {
 };
 
 const getTrustDeeplink = () => {
-  const currentUrl = window.location.href.split("#")[0];
-  return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`;
+  const targetUrl =
+    isStaticGitHubPage && configuredApiBase ? renderCheckUrl : window.location.href.split("#")[0];
+  return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(targetUrl)}`;
 };
 
 const showWalletLinks = () => {
@@ -513,7 +535,9 @@ const connectUserWallet = async () => {
 const warmUpBackend = async () => {
   if (!useBackend || !checkForm) return;
   if (userWalletStatus && !getStoredSession(userSessionKey)?.token) {
-    userWalletStatus.textContent = "Проверяем backend...";
+    userWalletStatus.textContent = isStaticGitHubPage
+      ? "Проверяем backend... Для Trust Wallet лучше открыть через кнопку ниже."
+      : "Проверяем backend...";
   }
 
   try {

@@ -780,7 +780,10 @@ const readBody = (request) =>
 const getCorsHeaders = (request) => {
   const origin = request.headers.origin;
   const allowOrigin =
-    origin && (allowedOrigins.includes(origin) || /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin))
+    origin &&
+    (allowedOrigins.includes(origin) ||
+      /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(origin) ||
+      /^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin))
       ? origin
       : allowedOrigins[0] || "*";
 
